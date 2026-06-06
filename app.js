@@ -33,7 +33,7 @@ function freshState(format, count) {
     name: 'Untitled Patchbay',
     format,
     count,
-    columns: Array.from({ length: count }, (_, i) => newColumn(i)),
+    columns: Array.from({ length: count }, () => newColumn()),
     categories: [
       { id: 'c-mic', name: 'Mics', color: '#5b9dff' },
       { id: 'c-pre', name: 'Preamps', color: '#2ea3a3' },
@@ -47,24 +47,29 @@ function freshState(format, count) {
       { id: 'c-mon', name: 'Monitors', color: '#f0a500' },
       { id: 'c-cue', name: 'Headphones', color: '#7f8c9b' },
     ],
-    faceplate: { labelLines: 2, gap: 4 },
-    labelStrip: {
-      cellW: 12, height: 9, font: "'Helvetica Neue', Arial, sans-serif",
-      fontSize: 7, weight: 600, upper: true,
-      borderW: 0.5, borderColor: '#222222',
-      bg: '#f4f4f0', fg: '#111111', useCat: false,
-      merges: { top: [], bottom: [] }, // each: {start, span}
-    },
+    faceplate: defaultFaceplate(),
+    labelStrip: defaultLabelStrip(),
+  };
+}
+// Fresh default sub-objects (new instances each call so states never share mutable arrays).
+function defaultFaceplate() { return { labelLines: 2, gap: 4 }; }
+function defaultLabelStrip() {
+  return {
+    cellW: 12, height: 9, font: "'Helvetica Neue', Arial, sans-serif",
+    fontSize: 7, weight: 600, upper: true,
+    borderW: 0.5, borderColor: '#222222',
+    bg: '#f4f4f0', fg: '#111111', useCat: false,
+    merges: { top: [], bottom: [] }, // each: {start, span}
   };
 }
 
 function newJack() { return { label: '', category: '', color: '', note: '', printLabel: '' }; }
-function newColumn(i) {
+function newColumn() {
   return { id: uid(), norm: 'half', top: newJack(), bottom: newJack() };
 }
 // Migrate a v1 (flat string) column or partial object to the per-jack shape.
-function migrateColumn(c, i) {
-  const col = newColumn(i);
+function migrateColumn(c) {
+  const col = newColumn();
   if (c == null) return col;
   if (c.id) col.id = c.id;
   if (c.norm) col.norm = c.norm;
@@ -139,7 +144,7 @@ function renderCats() {
   const wrap = $('#catChips');
   wrap.innerHTML = '';
   state.categories.forEach((c) => {
-    const chip = el('span', { class: 'cat-chip', title: 'Click to rename · color to recolor' }, [
+    const chip = el('span', { class: 'cat-chip', title: 'Click to rename · colour to recolour' }, [
       el('span', { class: 'dot', style: { background: c.color } }),
       el('input', {
         type: 'color', value: c.color, style: { width: '0', height: '0', opacity: '0', position: 'absolute' },
@@ -158,7 +163,7 @@ function renameCat(c) {
   if (name != null && name.trim()) { c.name = name.trim(); render(); }
 }
 function deleteCat(c) {
-  if (!confirm(`Delete category “${c.name}”? Points keep their colors.`)) return;
+  if (!confirm(`Delete category “${c.name}”? Points keep their colours.`)) return;
   state.columns.forEach((col) => { if (col.category === c.id) col.category = ''; });
   state.categories = state.categories.filter((x) => x.id !== c.id);
   render();
@@ -388,7 +393,7 @@ function tdColor(jack) {
     type: 'color', value: jack.color || jackColor(jack) || '#888888',
     onchange: (e) => { jack.color = e.target.value; touch(); render(); },
   });
-  const clear = el('span', { class: 'ghost', text: '⟲', title: 'Use category color', onclick: () => { jack.color = ''; touch(); render(); } });
+  const clear = el('span', { class: 'ghost', text: '⟲', title: 'Use category colour', onclick: () => { jack.color = ''; touch(); render(); } });
   return el('td', {}, el('div', { class: 'color-cell' }, [input, clear]));
 }
 function tdNorm(col) {
@@ -564,7 +569,7 @@ function setFormat(format, count) {
   if (count === state.count && format === state.format) return;
   state.format = format;
   if (count > state.count) {
-    for (let i = state.count; i < count; i++) state.columns.push(newColumn(i));
+    for (let i = state.count; i < count; i++) state.columns.push(newColumn());
   } else if (count < state.count) {
     if (!confirm(`Reduce to ${count} points? The last ${state.count - count} columns will be removed.`)) { renderFormatButtons(); return; }
     state.columns = state.columns.slice(0, count);
@@ -675,10 +680,12 @@ function loadJSON(text) {
   if (!data.columns) throw new Error('Unrecognized file — no columns or jacks found.');
   state = Object.assign(freshState(data.format || 'TT', data.count || data.columns.length), data);
   state.count = data.columns.length;
-  state.columns = data.columns.map((c, i) => migrateColumn(c, i));
-  if (!state.faceplate) state.faceplate = { labelLines: 2, gap: 4 };
-  if (!state.labelStrip) state.labelStrip = freshState('TT', 1).labelStrip;
-  if (!state.labelStrip.merges) state.labelStrip.merges = { top: [], bottom: [] };
+  state.columns = data.columns.map((c) => migrateColumn(c));
+  // Merge over fresh defaults so older / partial files still get every field.
+  state.faceplate = Object.assign(defaultFaceplate(), state.faceplate || {});
+  state.labelStrip = Object.assign(defaultLabelStrip(), state.labelStrip || {});
+  const mg = state.labelStrip.merges;
+  state.labelStrip.merges = { top: (mg && mg.top) || [], bottom: (mg && mg.bottom) || [] };
   ui.selectedCells.clear();
   $('#bayName').value = state.name || 'Untitled Patchbay';
   render();
@@ -740,7 +747,7 @@ function importForeign(data) {
   let fontApplied = false;
 
   state.columns = chIndices.map((chIdx, pos) => {
-    const col = newColumn(pos);
+    const col = newColumn();
     const topJack = jacks.find((j) => j.channelIndex === chIdx && j.position === 'top');
     const botJack = jacks.find((j) => j.channelIndex === chIdx && j.position === 'bottom');
     const fill = (jack, lane) => {
@@ -796,10 +803,9 @@ function loadCSV(text) {
     return NORM_ORDER.find((n) => NORMALLING[n].label.toLowerCase() === nv) ||
       (nv.includes('half') ? 'half' : nv.includes('thru') || nv.includes('open') ? 'thru' : nv.includes('par') || nv.includes('mult') ? 'parallel' : nv.includes('norm') ? 'normalled' : 'half');
   };
-  const fillJack = (j, label, cat, color, note, norm) => {
+  const fillJack = (j, label, cat, color, note) => {
     j.label = label || ''; j.color = color || ''; j.note = note || '';
     if (cat) j.category = ensureCatByName(cat);
-    return norm;
   };
 
   const iRow = idx('row', 'position', 'pos');
@@ -818,9 +824,9 @@ function loadCSV(text) {
     });
     const keys = [...groups.keys()];
     state.count = keys.length;
-    state.columns = keys.map((k, i) => {
+    state.columns = keys.map((k) => {
       const g = groups.get(k);
-      const col = newColumn(i);
+      const col = newColumn();
       let norm = 'half';
       ['top', 'bottom'].forEach((lane) => {
         const r = g[lane]; if (!r) return;
@@ -834,8 +840,8 @@ function loadCSV(text) {
     // Legacy format: one row per channel with Top/Bottom Label columns
     const iTop = head.findIndex((h) => h.includes('top')), iBot = head.findIndex((h) => h.includes('bottom'));
     state.count = body.length;
-    state.columns = body.map((r, i) => {
-      const col = newColumn(i);
+    state.columns = body.map((r) => {
+      const col = newColumn();
       col.top.label = iTop >= 0 ? r[iTop] : '';
       col.bottom.label = iBot >= 0 ? r[iBot] : '';
       const color = iCol >= 0 ? r[iCol] : '', note = iNote >= 0 ? r[iNote] : '';
@@ -878,7 +884,7 @@ function wire() {
   });
   // custom point count
   $('#pointCount').addEventListener('change', (e) => {
-    let n = Math.round(parseInt(e.target.value, 10));
+    let n = parseInt(e.target.value, 10);
     if (!n || n < 1) n = 1;
     if (n > 128) n = 128;
     setFormat(state.format, n);
@@ -896,8 +902,8 @@ function wire() {
   // categories
   $('#addCat').addEventListener('click', addCat);
   // faceplate display controls
-  $('#fp-lines').addEventListener('input', (e) => { state.faceplate.labelLines = Math.max(1, Math.min(4, parseInt(e.target.value) || 1)); touch(); renderFaceplate(); });
-  $('#fp-gap').addEventListener('input', (e) => { state.faceplate.gap = Math.max(0, parseInt(e.target.value) || 0); touch(); renderFaceplate(); });
+  $('#fp-lines').addEventListener('input', (e) => { state.faceplate.labelLines = Math.max(1, Math.min(4, parseInt(e.target.value, 10) || 1)); touch(); renderFaceplate(); });
+  $('#fp-gap').addEventListener('input', (e) => { state.faceplate.gap = Math.max(0, parseInt(e.target.value, 10) || 0); touch(); renderFaceplate(); });
   // save menu
   const menu = $('#saveMenu');
   $('#saveBtn').addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('open'); });
