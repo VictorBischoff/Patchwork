@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="PatchPlanerUltra — design, label, and export studio patchbays (XLR / TRS / TT). Faceplate, table, and printable label-strip designer on one page, with autosave." />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#0e1116" />
+<title>PatchPlanerUltra — Patchbay Designer</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="stylesheet" href="styles.css" />
+<!-- SheetJS for .xlsx export (optional; CSV/JSON work offline without it) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">▦</span>
+      <div>
+        <h1>PatchPlaner<span class="ultra">Ultra</span> <span class="ver" id="appVer"></span></h1>
+        <input id="bayName" class="bay-name" value="Untitled Patchbay" spellcheck="false" aria-label="Patchbay name" />
+      </div>
+    </div>
+
+    <div class="format-group" id="formatGroup" role="group" aria-label="Patchbay format">
+      <button class="fmt" data-format="XLR" data-count="16">16 · XLR</button>
+      <button class="fmt" data-format="TRS" data-count="48">48 · TRS</button>
+      <button class="fmt" data-format="TT" data-count="72">72 · TT</button>
+      <button class="fmt" data-format="TT" data-count="96">96 · TT</button>
+    </div>
+
+    <div class="count-control">
+      <label>Points <input type="number" id="pointCount" min="1" max="128" step="1" /></label>
+    </div>
+
+    <div class="io-group">
+      <button class="btn" id="newBtn" title="Start a new empty patchbay">New</button>
+      <div class="menu">
+        <button class="btn" id="saveBtn">Save ▾</button>
+        <div class="menu-list" id="saveMenu">
+          <button data-export="json">JSON (.json)</button>
+          <button data-export="csv">Sheets (.csv)</button>
+          <button data-export="xlsx">Excel (.xlsx)</button>
+        </div>
+      </div>
+      <button class="btn" id="loadBtn" title="Load a .json or .csv patchbay">Load</button>
+      <input type="file" id="fileInput" accept=".json,.csv" hidden />
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="search">
+      <span class="search-icon">⌕</span>
+      <input id="filter" placeholder="Filter by label, category or note…" spellcheck="false" />
+      <button id="clearFilter" class="ghost" title="Clear">✕</button>
+    </div>
+    <div class="cat-tools">
+      <span class="muted">Categories:</span>
+      <div id="catChips" class="cat-chips"></div>
+      <button class="ghost" id="addCat">+ Add</button>
+    </div>
+    <div class="spacer"></div>
+    <span class="muted" id="countBadge"></span>
+  </div>
+
+  <main id="page">
+    <!-- FACEPLATE -->
+    <section class="panel" id="panel-faceplate" data-panel="faceplate">
+      <header class="panel-head">
+        <button class="collapse" title="Collapse / expand">▾</button>
+        <h2>Faceplate</h2>
+        <div class="panel-controls">
+          <label>Label lines <input type="number" id="fp-lines" min="1" max="4" step="1" /></label>
+          <label>Spacing <input type="number" id="fp-gap" min="0" max="40" step="1" /> px</label>
+          <span class="muted small">Labels clamp — rows stay aligned.</span>
+        </div>
+      </header>
+      <div class="panel-body">
+        <div class="rack-unit">
+          <div class="rack-ear ear-left">
+            <span class="screw screw-tl"></span>
+            <span class="screw screw-bl"></span>
+            <div class="ab-group"><span class="ab">A</span><span class="ab">B</span></div>
+            <span class="ear-brand">PATCHPLANER</span>
+          </div>
+          <div class="faceplate-scroll">
+            <div class="faceplate" id="faceplate"></div>
+          </div>
+          <div class="rack-ear ear-right">
+            <span class="screw screw-tr"></span>
+            <span class="screw screw-br"></span>
+            <div class="ab-group"><span class="ab">A</span><span class="ab">B</span></div>
+            <span class="ear-brand" id="earModel">ULTRA · TT</span>
+          </div>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+    </section>
+
+    <!-- LABEL DESIGNER -->
+    <section class="panel" id="panel-labels" data-panel="labels">
+      <header class="panel-head">
+        <button class="collapse" title="Collapse / expand">▾</button>
+        <h2>Label Designer</h2>
+        <div class="panel-controls">
+          <span class="muted small">Cells map to faceplate columns · click cells to merge/split</span>
+        </div>
+      </header>
+      <div class="panel-body">
+      <div class="label-layout">
+        <aside class="label-controls">
+          <h3>Strip dimensions</h3>
+          <label>Cell width <input type="number" id="ls-cellw" min="4" max="40" step="0.5" /> mm</label>
+          <label>Strip height <input type="number" id="ls-height" min="4" max="30" step="0.5" /> mm</label>
+
+          <h3>Typography</h3>
+          <label>Font
+            <select id="ls-font">
+              <option value="'Helvetica Neue', Arial, sans-serif">Helvetica</option>
+              <option value="'Courier New', monospace">Courier</option>
+              <option value="Georgia, serif">Georgia</option>
+              <option value="'Arial Narrow', sans-serif">Arial Narrow</option>
+              <option value="Impact, sans-serif">Impact</option>
+            </select>
+          </label>
+          <label>Font size <input type="number" id="ls-fontsize" min="5" max="20" step="0.5" /> pt</label>
+          <label>Weight
+            <select id="ls-weight">
+              <option value="400">Regular</option>
+              <option value="600">Semibold</option>
+              <option value="700">Bold</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="ls-upper" /> Uppercase</label>
+
+          <h3>Borders</h3>
+          <label>Border width <input type="number" id="ls-bw" min="0" max="4" step="0.25" /> px</label>
+          <label>Border color <input type="color" id="ls-bc" /></label>
+
+          <h3>Colors</h3>
+          <label>Strip background <input type="color" id="ls-bg" /></label>
+          <label>Text color <input type="color" id="ls-fg" /></label>
+          <label class="check"><input type="checkbox" id="ls-usecat" /> Use category colors as cell fill</label>
+
+          <h3>Lane</h3>
+          <div class="seg-toggle">
+            <button class="lane-btn active" data-lane="top">Top row</button>
+            <button class="lane-btn" data-lane="bottom">Bottom row</button>
+          </div>
+          <p class="muted small">Click cells to select, then merge/split. Shift-click to select a range.</p>
+          <div class="merge-tools">
+            <button class="btn" id="mergeBtn">Merge ⟷</button>
+            <button class="btn" id="splitBtn">Split ⤲</button>
+          </div>
+          <button class="ghost" id="printLabels">🖶 Print / PDF</button>
+        </aside>
+
+        <div class="label-preview-wrap">
+          <div class="ruler" id="ruler"></div>
+          <div class="label-strip-area">
+            <div class="lane-label">TOP</div>
+            <div class="label-strip" id="stripTop"></div>
+            <div class="lane-label">BOTTOM</div>
+            <div class="label-strip" id="stripBottom"></div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <!-- TABLE -->
+    <section class="panel" id="panel-table" data-panel="table">
+      <header class="panel-head">
+        <button class="collapse" title="Collapse / expand">▾</button>
+        <h2>Table</h2>
+        <div class="panel-controls">
+          <span class="muted small">Each channel has a Top and Bottom row · drag ⠿ to reorder</span>
+        </div>
+      </header>
+      <div class="panel-body">
+        <div class="table-wrap">
+          <table class="grid" id="grid">
+            <thead>
+              <tr>
+                <th class="drag-col"></th>
+                <th class="num-col">#</th>
+                <th class="row-col">Row</th>
+                <th>Label</th>
+                <th>Category</th>
+                <th>Color</th>
+                <th>Normalling</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody id="gridBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status">Ready.</span>
+    <span class="save-state" id="saveState"></span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
