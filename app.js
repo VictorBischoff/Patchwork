@@ -20,7 +20,7 @@ const APP_VERSION = '1.0.0';
 const STORAGE_KEY = 'patchplanerultra.autosave.v1';
 
 /* ---------------- State ---------------- */
-let state = freshState('TT', 72);
+let state = freshState('TRS', 24);
 let ui = {
   collapsed: { faceplate: false, table: true, labels: true },
   filter: '',
