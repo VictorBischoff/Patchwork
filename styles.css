@@ -104,6 +104,15 @@ body {
 .search input:focus { outline: none; border-color: var(--accent); }
 .search #clearFilter { position: absolute; right: 4px; }
 .cat-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cat-toggle {
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  font-size: 13px; display: flex; align-items: center; gap: 6px; padding: 0;
+}
+.cat-toggle:hover { color: var(--txt); }
+.cat-toggle .collapse-chevron { font-size: 11px; transition: transform .15s; line-height: 1; }
+.cat-toggle .cat-count { font-size: 12px; opacity: .65; }
+.cat-tools.collapsed .collapse-chevron { transform: rotate(-90deg); }
+.cat-tools.collapsed #catChips, .cat-tools.collapsed #addCat { display: none; }
 .cat-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .cat-chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px 4px 6px;
@@ -270,33 +279,69 @@ main#page { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direct
 .legend .item { display: flex; align-items: center; gap: 6px; }
 
 /* ---------- Table ---------- */
-.table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-2); }
 .grid { border-collapse: collapse; width: 100%; font-size: 13px; }
-.grid th, .grid td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; }
-.grid thead th { position: sticky; top: 0; background: var(--bg-3); z-index: 5; font-weight: 600; color: var(--muted); }
-.grid tbody tr:hover { background: rgba(47,108,174,.08); }
+.grid th, .grid td { padding: 7px 10px; text-align: left; vertical-align: middle; }
+.grid thead th {
+  position: sticky; top: 0; z-index: 5;
+  background: linear-gradient(180deg, #d4d2c5, #c8c6b8);
+  font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--muted); border-bottom: 1px solid var(--line-2);
+}
+/* zebra banding: both rows of every other channel */
+.grid tr.band td { background: rgba(60,58,44,.05); }
+/* channel separation: dashed within a channel, solid between channels */
+.grid tr.ch-top td { border-bottom: 1px dashed rgba(60,58,44,.14); }
+.grid tr.ch-bottom td { border-bottom: 1px solid var(--line); }
+/* whole-channel hover (after band so it wins on equal specificity) */
+.grid tr.hover-ch td { background: rgba(47,108,174,.12); }
 .grid tr.dragging { opacity: .4; }
 .grid tr.drop-target td { box-shadow: inset 0 2px 0 var(--accent); }
-.grid tr.dimmed { opacity: .3; }
-.drag-col { width: 24px; }
-.num-col { width: 40px; color: var(--muted); text-align: center; vertical-align: middle; }
-.row-col { width: 48px; }
-.row-tag { width: 48px; font-size: 10px; font-weight: 700; letter-spacing: .5px; color: var(--muted); }
-.grid tr.ch-top td { border-bottom: none; }
-.grid tr.ch-bottom td { border-bottom: 1px solid var(--line-2); }
-.grid tr.ch-top:hover, .grid tr.ch-bottom:hover { background: rgba(47,108,174,.08); }
-.norm-cell { vertical-align: middle; }
-.grid td[rowspan] { vertical-align: middle; }
-.drag-handle { cursor: grab; color: var(--muted); user-select: none; text-align: center; }
-.grid input, .grid select {
-  background: transparent; border: 1px solid transparent; color: var(--txt);
-  padding: 4px 6px; border-radius: 5px; width: 100%; font-size: 13px; font-family: inherit;
+.grid tr.dimmed { opacity: .32; }
+
+.drag-col { width: 22px; }
+.num-col { width: 46px; text-align: center; }
+.ch-chip {
+  display: inline-block; min-width: 22px; padding: 2px 7px; border-radius: 6px;
+  background: rgba(255,255,255,.5); border: 1px solid var(--line-2); color: var(--txt);
+  font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums;
 }
-.grid input:hover, .grid select:hover { border-color: var(--line); }
-.grid input:focus, .grid select:focus { outline: none; border-color: var(--accent); background: var(--bg); }
+.row-col, .row-tag { width: 56px; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9.5px; font-weight: 700; letter-spacing: .6px; border: 1px solid transparent; }
+.tag-top { background: rgba(47,108,174,.14); color: var(--accent-2); border-color: rgba(47,108,174,.32); }
+.tag-bot { background: rgba(60,58,44,.1); color: var(--muted); border-color: var(--line-2); }
+.norm-cell { vertical-align: middle; }
+.norm-wrap { display: flex; align-items: center; gap: 8px; }
+.norm-wrap select { flex: 1; width: auto; }
+.norm-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.2); }
+.n-normalled .norm-dot { background: var(--good); }
+.n-half .norm-dot { background: var(--warn); }
+.n-thru .norm-dot { background: var(--accent); }
+.n-parallel .norm-dot { background: var(--danger); }
+.grid td[rowspan] { vertical-align: middle; }
+.drag-handle { cursor: grab; color: var(--line-2); user-select: none; text-align: center; font-size: 14px; }
+.grid tr:hover .drag-handle { color: var(--muted); }
+.drag-handle:hover { color: var(--accent) !important; }
+.drag-handle:active { cursor: grabbing; }
+
+/* editable cells read as light recessed console fields */
+.grid input, .grid select {
+  background: rgba(255,255,255,.32); border: 1px solid rgba(60,58,44,.12); color: var(--txt);
+  padding: 5px 8px; border-radius: 5px; width: 100%; font-size: 13px; font-family: inherit;
+}
+.grid input::placeholder { color: var(--muted); opacity: .65; }
+.grid input:hover, .grid select:hover { border-color: var(--line-2); background: rgba(255,255,255,.6); }
+.grid input:focus, .grid select:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px rgba(47,108,174,.18); }
 .grid select { cursor: pointer; }
 .color-cell { display: flex; align-items: center; gap: 6px; }
-.color-cell input[type=color] { width: 28px; height: 24px; padding: 0; border: 1px solid var(--line-2); border-radius: 4px; background: none; cursor: pointer; }
+.color-cell input[type=color] {
+  width: 26px; height: 26px; padding: 0; cursor: pointer; flex: none;
+  border: 2px solid var(--bg-2); border-radius: 50%; box-shadow: 0 0 0 1px var(--line-2);
+  background: none; -webkit-appearance: none; appearance: none;
+}
+.color-cell input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.color-cell input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
+.color-cell input[type=color]::-moz-color-swatch { border: none; border-radius: 50%; }
 
 /* ---------- Label Designer ---------- */
 .label-layout { display: grid; grid-template-columns: 240px 1fr; gap: 20px; height: 440px; }

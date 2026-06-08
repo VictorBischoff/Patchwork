@@ -54,8 +54,10 @@
       <input id="filter" placeholder="Filter by label, category or note…" spellcheck="false" />
       <button id="clearFilter" class="ghost" title="Clear">✕</button>
     </div>
-    <div class="cat-tools">
-      <span class="muted">Categories:</span>
+    <div class="cat-tools" id="catTools">
+      <button class="cat-toggle" id="catToggle" title="Show / hide categories">
+        <span class="collapse-chevron">▾</span> Categories <span class="cat-count" id="catCount"></span>
+      </button>
       <div id="catChips" class="cat-chips"></div>
       <button class="ghost" id="addCat">+ Add</button>
     </div>

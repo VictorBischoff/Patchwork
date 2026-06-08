@@ -23,6 +23,7 @@ const STORAGE_KEY = 'patchplanerultra.autosave.v1';
 let state = freshState('TRS', 24);
 let ui = {
   collapsed: { faceplate: false, table: true, labels: true },
+  catsCollapsed: false,
   filter: '',
   lane: 'top',            // label designer active lane
   selectedCells: new Set(), // indices in active lane
@@ -143,6 +144,8 @@ function renderFormatButtons() {
 function renderCats() {
   const wrap = $('#catChips');
   wrap.innerHTML = '';
+  const count = $('#catCount');
+  if (count) count.textContent = `(${state.categories.length})`;
   state.categories.forEach((c) => {
     const chip = el('span', { class: 'cat-chip', title: 'Click to rename · colour to recolour' }, [
       el('span', { class: 'dot', style: { background: c.color } }),
@@ -346,12 +349,12 @@ function renderTable() {
   const filtering = ui.filter.trim() !== '';
   state.columns.forEach((col, idx) => {
     const dim = filtering && !matches(col);
-    const cls = dim ? 'dimmed' : '';
+    const base = (dim ? ' dimmed' : '') + (idx % 2 ? ' band' : ''); // zebra band per channel
     // TOP row carries the rowspan cells (drag handle, #, normalling)
-    const trTop = el('tr', { class: cls + ' ch-top', 'data-idx': idx, 'data-id': col.id });
+    const trTop = el('tr', { class: 'ch-top' + base, 'data-idx': idx, 'data-id': col.id });
     trTop.append(el('td', { class: 'drag-handle', draggable: 'true', rowspan: '2', text: '⠿', title: 'Drag to reorder channel' }));
-    trTop.append(el('td', { class: 'num-col', rowspan: '2', text: String(idx + 1) }));
-    trTop.append(el('td', { class: 'row-tag', text: 'TOP' }));
+    trTop.append(el('td', { class: 'num-col', rowspan: '2' }, el('span', { class: 'ch-chip', text: String(idx + 1) })));
+    trTop.append(el('td', { class: 'row-tag' }, el('span', { class: 'tag tag-top', text: 'TOP' })));
     trTop.append(tdLabel(col.top));
     trTop.append(tdCat(col.top));
     trTop.append(tdColor(col.top));
@@ -360,8 +363,8 @@ function renderTable() {
     attachRowDrag(trTop, idx);
     body.append(trTop);
     // BOTTOM row
-    const trBot = el('tr', { class: cls + ' ch-bottom', 'data-idx': idx });
-    trBot.append(el('td', { class: 'row-tag', text: 'BOT' }));
+    const trBot = el('tr', { class: 'ch-bottom' + base, 'data-idx': idx });
+    trBot.append(el('td', { class: 'row-tag' }, el('span', { class: 'tag tag-bot', text: 'BOT' })));
     trBot.append(tdLabel(col.bottom));
     trBot.append(tdCat(col.bottom));
     trBot.append(tdColor(col.bottom));
@@ -403,7 +406,8 @@ function tdNorm(col) {
     if (n === col.norm) o.selected = true;
     sel.append(o);
   });
-  return el('td', { rowspan: '2', class: 'norm-cell' }, sel);
+  return el('td', { rowspan: '2', class: 'norm-cell' },
+    el('div', { class: 'norm-wrap n-' + col.norm }, [el('span', { class: 'norm-dot' }), sel]));
 }
 function focusRow(id) {
   const tr = $(`tr[data-id="${id}"]`);
@@ -501,15 +505,16 @@ function renderStrip(lane, container) {
 
   let i = 0;
   while (i < state.count) {
-    const m = mergeAt(i);
+    const idx = i; // per-iteration capture for the click closure below
+    const m = mergeAt(idx);
     const span = m ? m.span : 1;
-    const col = state.columns[i];
-    const text = laneText(col, lane) || '';
+    const col = state.columns[idx];
+    const text = (m && m.text) ? m.text : (laneText(col, lane) || '');
     const display = ls.upper ? text.toUpperCase() : text;
     const fill = ls.useCat ? (jackColor(col[lane]) || ls.bg) : ls.bg;
     const cell = el('div', {
-      class: 'label-cell' + (ui.lane === lane && isSelected(lane, i) ? ' selected' : ''),
-      'data-idx': i, 'data-lane': lane,
+      class: 'label-cell' + (ui.lane === lane && isSelected(lane, idx) ? ' selected' : ''),
+      'data-idx': idx, 'data-lane': lane,
       style: {
         width: (cellPx * span) + 'px', height: heightPx + 'px',
         background: fill, color: ls.fg,
@@ -517,9 +522,9 @@ function renderStrip(lane, container) {
         border: `${ls.borderW}px solid ${ls.borderColor}`,
       },
       text: display,
-      title: m ? `Merged cells ${m.start + 1}–${m.start + m.span}` : `Cell ${i + 1}`,
+      title: m ? `Merged cells ${m.start + 1}–${m.start + m.span}` : `Cell ${idx + 1}`,
     });
-    cell.addEventListener('click', (e) => onCellClick(lane, i, e));
+    cell.addEventListener('click', (e) => onCellClick(lane, idx, e));
     container.append(cell);
     i += span;
   }
@@ -539,6 +544,23 @@ function onCellClick(lane, i, e) {
   }
   renderLabels();
 }
+// Derive a sensible label for a merged cell: the shared base of the cells'
+// labels (e.g. "COMP L" + "COMP R" -> "COMP"), else the first label.
+function smartMergeLabel(labels) {
+  const items = labels.map((s) => (s || '').trim()).filter(Boolean);
+  if (items.length <= 1) return items[0] || '';
+  let prefix = items[0];
+  for (let n = 1; n < items.length && prefix; n++) {
+    const s = items[n];
+    let k = 0;
+    while (k < prefix.length && k < s.length && prefix[k].toLowerCase() === s[k].toLowerCase()) k++;
+    prefix = prefix.slice(0, k);
+  }
+  prefix = prefix.replace(/[\s\-_/.]+$/, '').trim(); // drop trailing separators (the "L"/"R" divider)
+  // Only use the prefix if the labels actually differ by a suffix; otherwise keep the first label.
+  if (prefix && items.some((s) => s.toLowerCase() !== prefix.toLowerCase())) return prefix;
+  return items[0];
+}
 function mergeCells() {
   const lane = ui.lane;
   const sel = [...ui.selectedCells].sort((a, b) => a - b);
@@ -547,12 +569,17 @@ function mergeCells() {
   if (end - start + 1 !== sel.length) { status('Merge requires a contiguous range.'); return; }
   // remove overlapping merges, then add
   const merges = state.labelStrip.merges[lane].filter((m) => m.start + m.span <= start || m.start > end);
-  merges.push({ start, span: end - start + 1 });
+  const labels = [];
+  for (let k = start; k <= end; k++) { const j = state.columns[k][lane]; labels.push(j.label || j.printLabel || ''); }
+  const smart = smartMergeLabel(labels);
+  const merge = { start, span: end - start + 1 };
+  if (smart) merge.text = smart;
+  merges.push(merge);
   merges.sort((a, b) => a.start - b.start);
   state.labelStrip.merges[lane] = merges;
   ui.selectedCells = new Set([start]);
   touch(); renderLabels();
-  status(`Merged cells ${start + 1}–${end + 1} on ${lane} lane.`);
+  status(`Merged cells ${start + 1}–${end + 1}${smart ? ` as “${smart}”` : ''} on ${lane} lane.`);
 }
 function splitCells() {
   const lane = ui.lane;
@@ -894,6 +921,19 @@ function wire() {
   $$('.panel-head .collapse').forEach((btn) => {
     btn.addEventListener('click', () => togglePanel(btn.closest('.panel').dataset.panel));
   });
+  // whole-channel hover highlight (delegated on the persistent tbody, survives re-renders)
+  const gridBody = $('#gridBody');
+  let hoverIdx = null;
+  const setChannelHover = (idx) => {
+    gridBody.querySelectorAll('tr.hover-ch').forEach((t) => t.classList.remove('hover-ch'));
+    if (idx != null) gridBody.querySelectorAll(`tr[data-idx="${idx}"]`).forEach((t) => t.classList.add('hover-ch'));
+  };
+  gridBody.addEventListener('mouseover', (e) => {
+    const tr = e.target.closest('tr');
+    const idx = tr ? tr.dataset.idx : null;
+    if (idx !== hoverIdx) { hoverIdx = idx; setChannelHover(idx); }
+  });
+  gridBody.addEventListener('mouseleave', () => { hoverIdx = null; setChannelHover(null); });
   // bay name
   $('#bayName').addEventListener('change', (e) => { state.name = e.target.value; touch(); });
   // filter — class-toggle only, no rebuild
@@ -901,6 +941,10 @@ function wire() {
   $('#clearFilter').addEventListener('click', () => { ui.filter = ''; $('#filter').value = ''; applyFilter(); });
   // categories
   $('#addCat').addEventListener('click', addCat);
+  $('#catToggle').addEventListener('click', () => {
+    ui.catsCollapsed = !ui.catsCollapsed;
+    $('#catTools').classList.toggle('collapsed', ui.catsCollapsed);
+  });
   // faceplate display controls
   $('#fp-lines').addEventListener('input', (e) => { state.faceplate.labelLines = Math.max(1, Math.min(4, parseInt(e.target.value, 10) || 1)); touch(); renderFaceplate(); });
   $('#fp-gap').addEventListener('input', (e) => { state.faceplate.gap = Math.max(0, parseInt(e.target.value, 10) || 0); touch(); renderFaceplate(); });
@@ -952,8 +996,9 @@ function seedDemo() {
     c.top.label = s[0]; c.bottom.label = s[1];
     c.top.category = c.bottom.category = s[2]; c.norm = s[3];
   });
-  // demo merge: L/R pair on top lane cells 3-4 (index 2-3)
-  state.labelStrip.merges.top.push({ start: 2, span: 2 });
+  // demo merge: L/R pair on top lane cells 3-4 (index 2-3) -> "Comp"
+  const demoText = smartMergeLabel([state.columns[2].top.label, state.columns[3].top.label]);
+  state.labelStrip.merges.top.push({ start: 2, span: 2, text: demoText });
 }
 
 /* ---------------- Init ---------------- */
