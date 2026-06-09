@@ -1,6 +1,8 @@
 # Patchwork
 
-**v1.0.0** — a self-contained patchbay designer for planning, labeling, and exporting audio patchbays. No build step and no install: it's plain HTML/CSS/JS that runs from a folder. (One optional CDN script is used only for `.xlsx` export; everything else works fully offline.)
+**[▶ Live demo](https://victorbischoff.github.io/Patchwork/)**
+
+**v1.1.0** — a self-contained patchbay designer for planning, labeling, and exporting audio patchbays. No build step and no install: it's plain HTML/CSS/JS that runs from a folder. (One optional CDN script is used only for `.xlsx` export; everything else works fully offline.)
 
 ## Run
 
