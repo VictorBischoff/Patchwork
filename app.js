@@ -1,4 +1,4 @@
-/* PatchPlanerUltra — patchbay designer
+/* Patchwork — patchbay designer
    Self-contained vanilla JS. State -> render for three views. */
 
 'use strict';
@@ -17,7 +17,8 @@ const DEFAULT_CAT_COLORS = ['#5b9dff', '#3fb950', '#d29922', '#f85149', '#a371f7
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 const APP_VERSION = '1.0.0';
-const STORAGE_KEY = 'patchplanerultra.autosave.v1';
+const STORAGE_KEY = 'patchwork.autosave.v1';
+const LEGACY_STORAGE_KEYS = ['patchplanerultra.autosave.v1']; // read-only fallback for older autosaves
 
 /* ---------------- State ---------------- */
 let state = freshState('TRS', 24);
@@ -193,7 +194,7 @@ function renderFaceplate() {
   $('#fp-lines').value = fpCfg.labelLines;
   $('#fp-gap').value = fpCfg.gap;
   const earModel = $('#earModel');
-  if (earModel) earModel.textContent = `ULTRA · ${state.format}`;
+  if (earModel) earModel.textContent = `${state.format} · ${state.count}`;
   const filtering = ui.filter.trim() !== '';
   state.columns.forEach((col, idx) => {
     const isMatch = matches(col);
@@ -434,9 +435,12 @@ function setSaveState(s) {
 }
 function restoreAutosave() {
   let raw;
-  try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return false; }
+  try {
+    raw = localStorage.getItem(STORAGE_KEY) ||
+      LEGACY_STORAGE_KEYS.map((k) => localStorage.getItem(k)).find(Boolean) || null;
+  } catch (e) { return false; }
   if (!raw) return false;
-  try { loadJSON(raw); return true; } catch (e) { return false; }
+  try { loadJSON(raw); return true; } catch (e) { return false; } // next edit re-saves under the current key
 }
 function newBay() {
   if (!confirm('Start a new, empty patchbay? This clears the current one (your autosave is replaced).')) return;
@@ -653,7 +657,7 @@ function download(filename, blob) {
 // Single source of truth for the serialized project (used by export + autosave).
 function snapshot() {
   const { app, version, ...rest } = state; // drop any echoed metadata fields
-  return { app: 'PatchPlanerUltra', version: APP_VERSION, ...rest, name: ($('#bayName') ? $('#bayName').value : state.name) };
+  return { app: 'Patchwork', version: APP_VERSION, ...rest, name: ($('#bayName') ? $('#bayName').value : state.name) };
 }
 function exportJSON() {
   download(safeName() + '.json', new Blob([JSON.stringify(snapshot(), null, 2)], { type: 'application/json' }));
@@ -1012,4 +1016,4 @@ render();
 setSaveState(restored ? 'saved' : '');
 status(restored
   ? `Restored your last session — ${state.count} channels. Your work autosaves locally as you edit.`
-  : `Welcome to PatchPlanerUltra v${APP_VERSION} — pick a format and start patching. Your work autosaves locally.`);
+  : `Welcome to Patchwork v${APP_VERSION} — pick a format and start patching. Your work autosaves locally.`);

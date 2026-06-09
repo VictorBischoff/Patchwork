@@ -44,7 +44,7 @@ body {
 .brand { display: flex; align-items: center; gap: 12px; }
 .logo { font-size: 28px; color: var(--accent); }
 .brand h1 { font-size: 18px; margin: 0; letter-spacing: .5px; }
-.brand .ultra { color: var(--accent); }
+.brand .accent { color: var(--accent); }
 .brand .ver { font-size: 10px; font-weight: 400; letter-spacing: 0; color: var(--muted); vertical-align: middle; }
 .bay-name {
   background: transparent; border: none; color: var(--muted);
