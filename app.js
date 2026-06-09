@@ -16,7 +16,7 @@ const DEFAULT_CAT_COLORS = ['#5b9dff', '#3fb950', '#d29922', '#f85149', '#a371f7
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const STORAGE_KEY = 'patchwork.autosave.v1';
 const LEGACY_STORAGE_KEYS = ['patchplanerultra.autosave.v1']; // read-only fallback for older autosaves
 
@@ -476,6 +476,18 @@ function onRowCheck(col, lane, e) {
   refreshSelectionViews();
 }
 function clearSelection() { ui.selRows.clear(); ui.rowAnchor = null; refreshSelectionViews(); }
+// Soft clear: drop selection by tweaking classes only (no rebuild), so focus on a
+// just-clicked input is preserved. Used for implicit "click-away / new input" deselect.
+function deselectAll() {
+  if (!ui.selRows.size) return;
+  ui.selRows.clear(); ui.rowAnchor = null;
+  $$('#faceplate .jack.selected').forEach((j) => j.classList.remove('selected'));
+  $$('#gridBody tr.row-selected').forEach((t) => t.classList.remove('row-selected'));
+  $$('#gridBody .row-check').forEach((c) => { if (c.checked) c.checked = false; });
+  updateSelAll();
+  buildBulkBar($('#bulkBar'));
+  buildBulkBar($('#faceBulkBar'));
+}
 // Selection is shared between faceplate and table — refresh whichever are open.
 function refreshSelectionViews() {
   if (!ui.collapsed.faceplate) renderFaceplate();
@@ -538,7 +550,7 @@ function buildBulkBar(bar) {
 /* ---- Faceplate marquee (shift-drag) + shift-click multi-select ---- */
 let marquee = null; // { startX, startY, box, dragged, startJack }
 function faceMouseDown(e) {
-  if (!e.shiftKey) return;                              // shift engages selection only
+  if (!e.shiftKey) { deselectAll(); return; }           // plain click/drag clears selection; shift engages it
   if (e.target.closest('input, select, button')) return; // don't hijack editable controls
   marquee = { startX: e.clientX, startY: e.clientY, box: null, dragged: false, startJack: e.target.closest('.jack') };
   e.preventDefault();                                   // avoid text selection while dragging
@@ -1116,6 +1128,11 @@ function wire() {
   });
   // faceplate marquee / shift-click multi-select (faceplate-scroll is static, attach once)
   $('.faceplate-scroll').addEventListener('mousedown', faceMouseDown);
+  // table: plain click off the checkbox (e.g. into a field) clears the selection
+  gridBody.addEventListener('mousedown', (e) => {
+    if (e.shiftKey || e.target.closest('.sel-cell')) return;
+    deselectAll();
+  });
   // bay name
   $('#bayName').addEventListener('change', (e) => { state.name = e.target.value; touch(); });
   // filter — class-toggle only, no rebuild
