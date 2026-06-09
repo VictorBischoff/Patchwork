@@ -240,6 +240,16 @@ main#page { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direct
   box-shadow: inset 0 1px 2px rgba(255,255,255,.45), inset 0 -2px 3px rgba(0,0,0,.6),
     0 0 0 2px var(--cat, transparent), 0 0 5px var(--cat, transparent), 0 1px 2px rgba(0,0,0,.85);
 }
+/* multi-select ring (selected jacks + live marquee preview) */
+.jack.selected::before, .jack.marq-in::before {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--accent), 0 0 7px 1px rgba(47,108,174,.85);
+  pointer-events: none; z-index: 1;
+}
+.marquee {
+  position: fixed; z-index: 500; pointer-events: none; border-radius: 2px;
+  border: 1px solid var(--accent); background: rgba(47,108,174,.16);
+}
 /* Faceplate legend: dark engraved ink on the warm-grey console panel */
 .fp-lbl-input {
   width: 46px; font-size: 9.5px; line-height: 12px; text-align: center;
@@ -298,6 +308,29 @@ main#page { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direct
 .grid tr.dragging { opacity: .4; }
 .grid tr.drop-target td { box-shadow: inset 0 2px 0 var(--accent); }
 .grid tr.dimmed { opacity: .32; }
+/* multi-select */
+.sel-col, .sel-cell { width: 30px; text-align: center; }
+.row-check { cursor: pointer; width: 15px; height: 15px; }
+.grid tr.row-selected td { background: rgba(47,108,174,.13); }
+.grid tr.row-selected .sel-cell { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* bulk-edit bar */
+.bulk-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 14px; background: var(--bg-3); border-bottom: 1px solid var(--line-2);
+}
+.bulk-bar .spacer { flex: 1; }
+.bulk-count { font-weight: 700; color: var(--txt); white-space: nowrap; }
+.bulk-field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.bulk-field > span { white-space: nowrap; }
+.bulk-bar select { background: var(--bg); border: 1px solid var(--line-2); color: var(--txt); padding: 5px 8px; border-radius: 6px; font-size: 13px; font-family: inherit; cursor: pointer; }
+.bulk-bar select:focus { outline: none; border-color: var(--accent); }
+.bulk-color-group { display: flex; align-items: center; gap: 6px; }
+.bulk-color-group input[type=color] { width: 28px; height: 28px; padding: 0; border: 1px solid var(--line-2); border-radius: 6px; background: none; cursor: pointer; }
+.bulk-bar .btn { padding: 5px 12px; }
+.bulk-bar .ghost { padding: 5px 10px; }
+/* the faceplate's bulk bar sits inside a padded panel body — make it a self-contained card */
+#faceBulkBar { margin: 12px 0 4px; border: 1px solid var(--line-2); border-radius: var(--radius); }
 
 .drag-col { width: 22px; }
 .num-col { width: 46px; text-align: center; }

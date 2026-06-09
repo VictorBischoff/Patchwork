@@ -95,6 +95,7 @@
             <span class="ear-brand" id="earModel">TRS · 24</span>
           </div>
         </div>
+        <div class="bulk-bar" id="faceBulkBar" hidden></div>
         <div class="legend" id="legend"></div>
       </div>
     </section>
@@ -176,14 +177,16 @@
         <button class="collapse" title="Collapse / expand">▾</button>
         <h2>Table</h2>
         <div class="panel-controls">
-          <span class="muted small">Each channel has a Top and Bottom row · drag ⠿ to reorder</span>
+          <span class="muted small">Tick rows to select · shift-click for a range · then bulk-edit</span>
         </div>
       </header>
       <div class="panel-body">
+        <div class="bulk-bar" id="bulkBar" hidden></div>
         <div class="table-wrap">
           <table class="grid" id="grid">
             <thead>
               <tr>
+                <th class="sel-col"><input type="checkbox" id="selAll" title="Select / deselect all" /></th>
                 <th class="drag-col"></th>
                 <th class="num-col">#</th>
                 <th class="row-col">Row</th>

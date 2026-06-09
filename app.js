@@ -16,7 +16,7 @@ const DEFAULT_CAT_COLORS = ['#5b9dff', '#3fb950', '#d29922', '#f85149', '#a371f7
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.2.0';
 const STORAGE_KEY = 'patchwork.autosave.v1';
 const LEGACY_STORAGE_KEYS = ['patchplanerultra.autosave.v1']; // read-only fallback for older autosaves
 
@@ -27,7 +27,9 @@ let ui = {
   catsCollapsed: false,
   filter: '',
   lane: 'top',            // label designer active lane
-  selectedCells: new Set(), // indices in active lane
+  selectedCells: new Set(), // label-strip cell indices in active lane
+  selRows: new Set(),     // table multi-select: keys "<colId>|<lane>"
+  rowAnchor: null,        // anchor key for shift-click range selection
 };
 
 function freshState(format, count) {
@@ -221,6 +223,7 @@ function renderFaceplate() {
     fp.append(colNode);
   });
   if (scroller) scroller.scrollLeft = savedScroll;
+  buildBulkBar($('#faceBulkBar'));
 }
 // Inline-editable jack label. Disables column drag while editing so text can be selected.
 function fpLabel(jack, colNode) {
@@ -239,9 +242,16 @@ function fpLabel(jack, colNode) {
 }
 function jackNode(col, lane) {
   const color = jackColor(col[lane]);
+  const key = rowKey(col, lane);
   const j = el('div', {
-    class: 'jack' + (color ? ' cat-fill' : ''), title: 'Click to set category / colour / note',
-    onclick: (e) => { e.stopPropagation(); openJackPopover(col, lane, j); },
+    class: 'jack' + (color ? ' cat-fill' : '') + (ui.selRows.has(key) ? ' selected' : ''),
+    'data-key': key,
+    title: 'Click to set category / colour / note · shift-click or shift-drag to multi-select',
+    onclick: (e) => {
+      if (e.shiftKey) { e.stopPropagation(); return; } // selection handled by marquee mouseup
+      e.stopPropagation();
+      openJackPopover(col, lane, j);
+    },
     ondblclick: (e) => e.stopPropagation(),
   });
   if (color) j.style.setProperty('--cat', color);
@@ -334,7 +344,7 @@ function openJackPopover(col, lane, anchor) {
 function renderLegend() {
   const lg = $('#legend');
   lg.innerHTML = '';
-  lg.append(el('div', { class: 'item', html: '<b>Click</b> a label to edit · <b>click</b> a jack for category/colour · <b>click</b> the badge to cycle normalling · <b>double-click #</b> → table' }));
+  lg.append(el('div', { class: 'item', html: '<b>Click</b> a label to edit · <b>click</b> a jack for category/colour · <b>shift-drag</b> to multi-select · <b>double-click #</b> → table' }));
   NORM_ORDER.forEach((n) => {
     lg.append(el('div', { class: 'item' }, [
       el('span', { class: 'fp-norm', text: NORMALLING[n].abbr }),
@@ -347,12 +357,16 @@ function renderLegend() {
 function renderTable() {
   const body = $('#gridBody');
   body.innerHTML = '';
+  pruneSelection();
   const filtering = ui.filter.trim() !== '';
   state.columns.forEach((col, idx) => {
     const dim = filtering && !matches(col);
     const base = (dim ? ' dimmed' : '') + (idx % 2 ? ' band' : ''); // zebra band per channel
+    const selTop = ui.selRows.has(rowKey(col, 'top')) ? ' row-selected' : '';
+    const selBot = ui.selRows.has(rowKey(col, 'bottom')) ? ' row-selected' : '';
     // TOP row carries the rowspan cells (drag handle, #, normalling)
-    const trTop = el('tr', { class: 'ch-top' + base, 'data-idx': idx, 'data-id': col.id });
+    const trTop = el('tr', { class: 'ch-top' + base + selTop, 'data-idx': idx, 'data-id': col.id });
+    trTop.append(tdSelect(col, 'top'));
     trTop.append(el('td', { class: 'drag-handle', draggable: 'true', rowspan: '2', text: '⠿', title: 'Drag to reorder channel' }));
     trTop.append(el('td', { class: 'num-col', rowspan: '2' }, el('span', { class: 'ch-chip', text: String(idx + 1) })));
     trTop.append(el('td', { class: 'row-tag' }, el('span', { class: 'tag tag-top', text: 'TOP' })));
@@ -364,7 +378,8 @@ function renderTable() {
     attachRowDrag(trTop, idx);
     body.append(trTop);
     // BOTTOM row
-    const trBot = el('tr', { class: 'ch-bottom' + base, 'data-idx': idx });
+    const trBot = el('tr', { class: 'ch-bottom' + base + selBot, 'data-idx': idx });
+    trBot.append(tdSelect(col, 'bottom'));
     trBot.append(el('td', { class: 'row-tag' }, el('span', { class: 'tag tag-bot', text: 'BOT' })));
     trBot.append(tdLabel(col.bottom));
     trBot.append(tdCat(col.bottom));
@@ -372,6 +387,8 @@ function renderTable() {
     trBot.append(tdLabel(col.bottom, 'note'));
     body.append(trBot);
   });
+  buildBulkBar($('#bulkBar'));
+  updateSelAll();
 }
 function tdLabel(jack, field = 'label') {
   const td = el('td');
@@ -414,6 +431,151 @@ function focusRow(id) {
   const tr = $(`tr[data-id="${id}"]`);
   if (tr) { tr.scrollIntoView({ block: 'center' }); tr.querySelector('input').focus(); }
 }
+
+/* ---------------- Table multi-select + bulk edit ---------------- */
+function rowKey(col, lane) { return col.id + '|' + lane; }
+function orderedRowKeys() {
+  const keys = [];
+  state.columns.forEach((c) => { keys.push(rowKey(c, 'top'), rowKey(c, 'bottom')); });
+  return keys;
+}
+// Drop selection keys for columns that no longer exist (after load / new / resize).
+function pruneSelection() {
+  if (!ui.selRows.size) return;
+  const ids = new Set(state.columns.map((c) => c.id));
+  ui.selRows.forEach((k) => { if (!ids.has(k.slice(0, k.indexOf('|')))) ui.selRows.delete(k); });
+}
+function selectedJacks() {
+  const out = [];
+  ui.selRows.forEach((key) => {
+    const i = key.indexOf('|');
+    const col = state.columns.find((c) => c.id === key.slice(0, i));
+    if (col) out.push({ col, lane: key.slice(i + 1) });
+  });
+  return out;
+}
+function tdSelect(col, lane) {
+  const cb = el('input', { type: 'checkbox', class: 'row-check', title: 'Select (shift-click for a range)' });
+  cb.checked = ui.selRows.has(rowKey(col, lane));
+  cb.addEventListener('click', (e) => onRowCheck(col, lane, e));
+  return el('td', { class: 'sel-cell' }, cb);
+}
+function onRowCheck(col, lane, e) {
+  const key = rowKey(col, lane);
+  if (e.shiftKey && ui.rowAnchor) {
+    const order = orderedRowKeys();
+    const a = order.indexOf(ui.rowAnchor), b = order.indexOf(key);
+    if (a !== -1 && b !== -1) {
+      const [lo, hi] = a <= b ? [a, b] : [b, a];
+      for (let i = lo; i <= hi; i++) ui.selRows.add(order[i]);
+    }
+  } else {
+    if (ui.selRows.has(key)) ui.selRows.delete(key); else ui.selRows.add(key);
+    ui.rowAnchor = key;
+  }
+  refreshSelectionViews();
+}
+function clearSelection() { ui.selRows.clear(); ui.rowAnchor = null; refreshSelectionViews(); }
+// Selection is shared between faceplate and table — refresh whichever are open.
+function refreshSelectionViews() {
+  if (!ui.collapsed.faceplate) renderFaceplate();
+  if (!ui.collapsed.table) renderTable();
+}
+function updateSelAll() {
+  const selAll = $('#selAll');
+  if (!selAll) return;
+  const total = state.columns.length * 2;
+  const n = ui.selRows.size;
+  selAll.checked = n > 0 && n >= total;
+  selAll.indeterminate = n > 0 && n < total;
+}
+// Apply one attribute to every selected jack (category/color) or its channel (norm).
+function applyBulk(attr, value) {
+  const jacks = selectedJacks();
+  if (!jacks.length) return;
+  if (attr === 'norm') {
+    const chans = new Set();
+    jacks.forEach(({ col }) => { col.norm = value; chans.add(col.id); });
+    status(`Set normalling to “${NORMALLING[value].label}” on ${chans.size} channel${chans.size === 1 ? '' : 's'}.`);
+  } else {
+    jacks.forEach(({ col, lane }) => { col[lane][attr] = value; });
+    const what = attr === 'category' ? 'category' : (value ? 'colour' : 'colour (cleared)');
+    status(`Updated ${what} on ${jacks.length} selected jack${jacks.length === 1 ? '' : 's'}.`);
+  }
+  touch(); render(); // selection persists (keyed by column id) so you can apply several settings
+}
+function bulkField(label, control) {
+  return el('label', { class: 'bulk-field' }, [el('span', { text: label }), control]);
+}
+function buildBulkBar(bar) {
+  if (!bar) return;
+  const n = ui.selRows.size;
+  bar.hidden = n === 0;
+  bar.innerHTML = '';
+  if (n === 0) return;
+  bar.append(el('span', { class: 'bulk-count', text: `${n} selected` }));
+
+  const catSel = el('select', { onchange: (e) => { if (e.target.value !== '__keep') applyBulk('category', e.target.value); } });
+  catSel.append(el('option', { value: '__keep', text: 'Set category…' }));
+  catSel.append(el('option', { value: '', text: '— none —' }));
+  state.categories.forEach((c) => catSel.append(el('option', { value: c.id, text: c.name })));
+  bar.append(bulkField('Category', catSel));
+
+  const normSel = el('select', { onchange: (e) => { if (e.target.value !== '__keep') applyBulk('norm', e.target.value); } });
+  normSel.append(el('option', { value: '__keep', text: 'Set normalling…' }));
+  NORM_ORDER.forEach((nm) => normSel.append(el('option', { value: nm, text: NORMALLING[nm].label })));
+  bar.append(bulkField('Normalling', normSel));
+
+  const colorInp = el('input', { type: 'color', value: '#888888' });
+  const colorBtn = el('button', { class: 'btn', text: 'Apply', onclick: () => applyBulk('color', colorInp.value) });
+  const colorClr = el('button', { class: 'ghost', text: 'Clear', title: 'Use category colour', onclick: () => applyBulk('color', '') });
+  bar.append(bulkField('Colour', el('span', { class: 'bulk-color-group' }, [colorInp, colorBtn, colorClr])));
+
+  bar.append(el('span', { class: 'spacer' }));
+  bar.append(el('button', { class: 'ghost', text: 'Deselect all', onclick: clearSelection }));
+}
+
+/* ---- Faceplate marquee (shift-drag) + shift-click multi-select ---- */
+let marquee = null; // { startX, startY, box, dragged, startJack }
+function faceMouseDown(e) {
+  if (!e.shiftKey) return;                              // shift engages selection only
+  if (e.target.closest('input, select, button')) return; // don't hijack editable controls
+  marquee = { startX: e.clientX, startY: e.clientY, box: null, dragged: false, startJack: e.target.closest('.jack') };
+  e.preventDefault();                                   // avoid text selection while dragging
+  document.addEventListener('mousemove', faceMouseMove, true);
+  document.addEventListener('mouseup', faceMouseUp, true);
+}
+function faceMouseMove(e) {
+  if (!marquee) return;
+  const dx = e.clientX - marquee.startX, dy = e.clientY - marquee.startY;
+  if (!marquee.dragged && Math.abs(dx) + Math.abs(dy) < 5) return; // ignore tiny movements
+  marquee.dragged = true;
+  if (!marquee.box) { marquee.box = el('div', { class: 'marquee' }); document.body.append(marquee.box); }
+  const x = Math.min(e.clientX, marquee.startX), y = Math.min(e.clientY, marquee.startY);
+  const w = Math.abs(dx), h = Math.abs(dy);
+  Object.assign(marquee.box.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
+  // live preview: flag jacks whose centre falls inside the box
+  $$('#faceplate .jack').forEach((j) => {
+    const r = j.getBoundingClientRect();
+    const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+    j.classList.toggle('marq-in', cx >= x && cx <= x + w && cy >= y && cy <= y + h);
+  });
+}
+function faceMouseUp(e) {
+  document.removeEventListener('mousemove', faceMouseMove, true);
+  document.removeEventListener('mouseup', faceMouseUp, true);
+  if (!marquee) return;
+  if (marquee.dragged) {
+    $$('#faceplate .jack.marq-in').forEach((j) => ui.selRows.add(j.dataset.key)); // additive
+    if (marquee.box) marquee.box.remove();
+  } else if (e.shiftKey && marquee.startJack) {
+    const key = marquee.startJack.dataset.key; // shift-click toggles a single jack
+    if (ui.selRows.has(key)) ui.selRows.delete(key); else ui.selRows.add(key);
+  }
+  marquee = null;
+  refreshSelectionViews();
+}
+
 function touch() { state.modified = Date.now(); schedulePersist(); }
 
 /* ---------------- Autosave (localStorage) ---------------- */
@@ -461,7 +623,10 @@ function moveColumn(from, to) {
   render();
 }
 function attachColDrag(node, idx) {
-  node.addEventListener('dragstart', (e) => { dragFrom = idx; node.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+  node.addEventListener('dragstart', (e) => {
+    if (e.shiftKey) { e.preventDefault(); return; } // shift-drag = marquee select, not reorder
+    dragFrom = idx; node.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move';
+  });
   node.addEventListener('dragend', () => { node.classList.remove('dragging'); $$('.drop-target').forEach((n) => n.classList.remove('drop-target')); });
   node.addEventListener('dragover', (e) => { e.preventDefault(); node.classList.add('drop-target'); });
   node.addEventListener('dragleave', () => node.classList.remove('drop-target'));
@@ -938,6 +1103,19 @@ function wire() {
     if (idx !== hoverIdx) { hoverIdx = idx; setChannelHover(idx); }
   });
   gridBody.addEventListener('mouseleave', () => { hoverIdx = null; setChannelHover(null); });
+  // select-all checkbox (respects the active filter)
+  $('#selAll').addEventListener('change', (e) => {
+    ui.selRows.clear(); ui.rowAnchor = null;
+    if (e.target.checked) {
+      const filtering = ui.filter.trim() !== '';
+      state.columns.forEach((col) => {
+        if (!filtering || matches(col)) { ui.selRows.add(rowKey(col, 'top')); ui.selRows.add(rowKey(col, 'bottom')); }
+      });
+    }
+    refreshSelectionViews();
+  });
+  // faceplate marquee / shift-click multi-select (faceplate-scroll is static, attach once)
+  $('.faceplate-scroll').addEventListener('mousedown', faceMouseDown);
   // bay name
   $('#bayName').addEventListener('change', (e) => { state.name = e.target.value; touch(); });
   // filter — class-toggle only, no rebuild
