@@ -415,6 +415,42 @@ main#page { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direct
 }
 .label-cell.selected { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 2; }
 
+/* ---------- AI design button + modal ---------- */
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent-2); font-weight: 600; }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn.ai-btn { border-color: var(--accent); color: var(--accent-2); font-weight: 600; }
+.btn.ai-btn:hover { background: rgba(47,108,174,.12); }
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 400; display: flex; align-items: center; justify-content: center;
+  background: rgba(30,28,20,.55); padding: 24px; overflow: auto;
+}
+.modal {
+  width: 100%; max-width: 520px; background: var(--bg-2); color: var(--txt);
+  border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: var(--bg-3); border-bottom: 1px solid var(--line); }
+.modal-head h2 { margin: 0; font-size: 16px; }
+.modal-close { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+.modal-close:hover { color: var(--txt); background: var(--bg); }
+.modal-body { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.modal-body .field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+.modal-body .field > span { color: var(--txt); }
+.modal-body textarea, .modal-body input[type=text], .modal-body input[type=password], .modal-body input[type=number], .modal-body select {
+  background: var(--bg); border: 1px solid var(--line-2); color: var(--txt);
+  border-radius: 7px; padding: 8px 9px; font-size: 13px; font-family: inherit; width: 100%;
+}
+.modal-body textarea { resize: vertical; min-height: 120px; line-height: 1.5; }
+.modal-body textarea:focus, .modal-body input:focus, .modal-body select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(47,108,174,.15); }
+.modal-body .field-row { display: flex; gap: 12px; }
+.modal-body .field-row .field { flex: 1; }
+.modal-body .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.modal-body a { color: var(--accent-2); }
+.modal-status { min-height: 18px; font-size: 13px; }
+.modal-status.err { color: var(--danger); }
+.modal-status.busy { color: var(--accent-2); }
+.modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); background: var(--bg-3); }
+
 /* ---------- Status bar ---------- */
 .statusbar {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;

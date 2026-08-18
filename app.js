@@ -1083,6 +1083,161 @@ function parseCSV(text) {
   return rows;
 }
 
+/* ---------------- AI layout (bring-your-own Anthropic key) ---------------- */
+const AI_KEY_STORAGE = 'patchwork.anthropicKey';
+const AI_SYSTEM = `You are a professional recording-studio patchbay designer. Given a list of studio gear, design the most useful patchbay and return it ONLY by calling the design_patchbay tool.
+
+Follow these conventions:
+- A patchbay is two rows of jacks. The TOP row is sources/outputs (mic-pre outputs, console sends, outboard outputs, playback, instrument outputs). The BOTTOM row is destinations/inputs (converter/interface inputs, outboard inputs, amp/monitor inputs, recorder inputs).
+- Arrange each column so the natural vertical (normalled) connection routes signal sensibly — e.g. a preamp OUT on top sits over the converter IN on the bottom.
+- Set normalling per channel: "normalled" for a default path that should always connect (pre -> converter); "half" for insert / monitoring paths a patch should break (the common default); "thru" (non-normalled) when there should be no default internal connection; "parallel" for mults/splits.
+- Group related I/O together, keep stereo L/R pairs adjacent and in order, and order groups logically: mics/preamps, converters/interface, outboard/FX, instruments/synths, monitors, headphones.
+- Labels must be short (<= 10 chars), studio-style: "NEVE 1", "APOLLO 1", "COMP L", "MON L".
+- Give every jack a concise category, and provide a categories list with a distinct hex colour (e.g. #3fb950) per category name you use.
+- Choose a format that fits: XLR for mic-level bays, TT or TRS for line-level patching (most studio bays are TT/TRS). Choose a channel count that covers the listed I/O. Honour any format or channel count the user specifies.
+Return only the tool call.`;
+
+function aiTool() {
+  const jack = {
+    type: 'object',
+    properties: {
+      label: { type: 'string', description: 'Short jack label, <= 10 chars' },
+      category: { type: 'string', description: 'Category name for this jack' },
+    },
+    required: ['label'],
+  };
+  return {
+    name: 'design_patchbay',
+    description: 'Return an optimal studio patchbay layout for the supplied gear.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Short name for the patchbay' },
+        format: { type: 'string', enum: ['XLR', 'TRS', 'TT'] },
+        categories: {
+          type: 'array',
+          description: 'Categories used, each with a distinct hex colour',
+          items: {
+            type: 'object',
+            properties: { name: { type: 'string' }, color: { type: 'string', description: 'hex colour like #3fb950' } },
+            required: ['name'],
+          },
+        },
+        channels: {
+          type: 'array',
+          description: 'One entry per patchbay channel (column), in physical order',
+          items: {
+            type: 'object',
+            properties: { top: jack, bottom: jack, norm: { type: 'string', enum: NORM_ORDER } },
+            required: ['top', 'bottom'],
+          },
+        },
+      },
+      required: ['name', 'format', 'channels'],
+    },
+  };
+}
+
+async function generateWithAI({ gear, format, size, model, apiKey }) {
+  const userText = `Gear:\n${gear}\n\nTarget format: ${format || 'auto — you choose'}\nTarget channel count: ${size || 'auto — choose based on the gear'}`;
+  const body = {
+    model,
+    max_tokens: 12000,
+    system: AI_SYSTEM,
+    tools: [aiTool()],
+    tool_choice: { type: 'tool', name: 'design_patchbay' },
+    messages: [{ role: 'user', content: userText }],
+  };
+  // Thinking must be off to force a specific tool; the Claude 5 models accept the explicit disabled form.
+  if (model === 'claude-opus-5' || model === 'claude-sonnet-5') body.thinking = { type: 'disabled' };
+
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    throw new Error('Network error reaching the Anthropic API. Check your connection.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data && data.error && data.error.message) || `Anthropic API error (HTTP ${res.status}).`);
+  const block = (data.content || []).find((b) => b.type === 'tool_use' && b.name === 'design_patchbay');
+  if (!block || !block.input) throw new Error('The model did not return a layout — try again or rephrase your gear list.');
+  return block.input;
+}
+
+// Map the tool's structured output into app state (like loading a file).
+function applyAILayout(data) {
+  const fmt = ['XLR', 'TRS', 'TT'].includes(data.format) ? data.format : 'TRS';
+  const channels = Array.isArray(data.channels) ? data.channels : [];
+  const count = Math.max(1, Math.min(128, channels.length || 24));
+  state = freshState(fmt, count);
+  state.name = (typeof data.name === 'string' && data.name.trim()) ? data.name.trim().slice(0, 60) : 'AI Patchbay';
+  // Seed categories from the model's list (with its colours), then let channel refs fill in any extras.
+  state.categories = [];
+  (Array.isArray(data.categories) ? data.categories : []).forEach((c) => {
+    if (!c || !c.name || state.categories.some((x) => x.name.toLowerCase() === String(c.name).toLowerCase())) return;
+    const hex = typeof c.color === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c.color) ? c.color : DEFAULT_CAT_COLORS[state.categories.length % DEFAULT_CAT_COLORS.length];
+    state.categories.push({ id: 'c-' + uid(), name: String(c.name), color: hex });
+  });
+  state.columns = Array.from({ length: count }, (_, i) => {
+    const ch = channels[i] || {};
+    const col = newColumn();
+    const top = ch.top || {}, bot = ch.bottom || {};
+    col.top.label = String(top.label || '').slice(0, 40);
+    col.bottom.label = String(bot.label || '').slice(0, 40);
+    if (top.category) col.top.category = ensureCatByName(top.category);
+    if (bot.category) col.bottom.category = ensureCatByName(bot.category);
+    col.norm = NORM_ORDER.includes(ch.norm) ? ch.norm : 'half';
+    return col;
+  });
+  state.labelStrip.merges = { top: [], bottom: [] };
+  ui.selectedCells.clear(); ui.selRows.clear(); ui.rowAnchor = null;
+  $('#bayName').value = state.name;
+  render(); persistNow();
+  status(`AI designed a ${count}-channel · ${fmt} patchbay for your gear.`);
+}
+
+function openAiModal() {
+  const modal = $('#aiModal');
+  if (!modal) return;
+  try { const k = localStorage.getItem(AI_KEY_STORAGE); if (k) { $('#aiKey').value = k; $('#aiRemember').checked = true; } } catch (e) { /* ignore */ }
+  const s = $('#aiStatus'); s.textContent = ''; s.className = 'modal-status';
+  modal.hidden = false;
+  setTimeout(() => $('#aiGear').focus(), 30);
+}
+function closeAiModal() { const m = $('#aiModal'); if (m) m.hidden = true; }
+async function runAiDesign() {
+  const gear = $('#aiGear').value.trim();
+  const apiKey = $('#aiKey').value.trim();
+  const setStat = (msg, kind) => { const s = $('#aiStatus'); s.textContent = msg; s.className = 'modal-status' + (kind ? ' ' + kind : ''); };
+  if (!gear) { setStat('List at least one piece of gear first.', 'err'); $('#aiGear').focus(); return; }
+  if (!apiKey) { setStat('Enter your Anthropic API key.', 'err'); $('#aiKey').focus(); return; }
+  const model = $('#aiModel').value;
+  const format = $('#aiFormat').value;
+  const size = parseInt($('#aiSize').value, 10) || 0;
+  try { if ($('#aiRemember').checked) localStorage.setItem(AI_KEY_STORAGE, apiKey); else localStorage.removeItem(AI_KEY_STORAGE); } catch (e) { /* ignore */ }
+  const btn = $('#aiGenerate');
+  btn.disabled = true;
+  setStat('Designing your patchbay… this can take 10–30 seconds.', 'busy');
+  try {
+    const layout = await generateWithAI({ gear, format, size, model, apiKey });
+    applyAILayout(layout);
+    closeAiModal();
+  } catch (err) {
+    setStat('Failed: ' + (err && err.message ? err.message : String(err)), 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 /* ---------------- Events / wiring ---------------- */
 function wire() {
   // format buttons
@@ -1156,6 +1311,12 @@ function wire() {
     ({ json: exportJSON, csv: exportCSV, xlsx: exportXLSX })[t.dataset.export]();
     menu.classList.remove('open');
   });
+  // AI design modal
+  $('#aiBtn').addEventListener('click', openAiModal);
+  $('#aiClose').addEventListener('click', closeAiModal);
+  $('#aiCancel').addEventListener('click', closeAiModal);
+  $('#aiGenerate').addEventListener('click', runAiDesign);
+  $('#aiModal').addEventListener('mousedown', (e) => { if (e.target.id === 'aiModal') closeAiModal(); });
   // new / load
   $('#newBtn').addEventListener('click', newBay);
   $('#loadBtn').addEventListener('click', () => $('#fileInput').click());
@@ -1177,9 +1338,10 @@ function wire() {
   $('#splitBtn').addEventListener('click', splitCells);
   $('#printLabels').addEventListener('click', () => window.print());
 
-  // keyboard: cmd/ctrl+f focuses filter
+  // keyboard: cmd/ctrl+f focuses filter · Escape closes the AI modal
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); $('#filter').focus(); }
+    else if (e.key === 'Escape' && !$('#aiModal').hidden) closeAiModal();
   });
 }
 

@@ -34,6 +34,7 @@
     </div>
 
     <div class="io-group">
+      <button class="btn ai-btn" id="aiBtn" title="Design a patchbay from your gear with AI">✨ AI Design</button>
       <button class="btn" id="newBtn" title="Start a new empty patchbay">New</button>
       <div class="menu">
         <button class="btn" id="saveBtn">Save ▾</button>
@@ -208,6 +209,49 @@
     <span id="status">Ready.</span>
     <span class="save-state" id="saveState"></span>
   </footer>
+
+  <!-- AI design modal -->
+  <div class="modal-overlay" id="aiModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="aiTitle">
+      <header class="modal-head">
+        <h2 id="aiTitle">✨ Design with AI</h2>
+        <button class="modal-close" id="aiClose" title="Close" aria-label="Close">✕</button>
+      </header>
+      <div class="modal-body">
+        <p class="muted small">List your gear and Claude will lay out an optimal patchbay — outputs on top, inputs below, sensible normalling, categories and labels.</p>
+        <label class="field">
+          <span>Your gear <span class="muted small">— one item per line, or describe your setup</span></span>
+          <textarea id="aiGear" rows="7" spellcheck="false" placeholder="UA Apollo x8&#10;Neve 1073 preamp x2&#10;SSL Fusion&#10;Warm Audio WA-2A&#10;Yamaha NS-10 monitors&#10;Roland Juno-106&#10;Akai MPC"></textarea>
+        </label>
+        <div class="field-row">
+          <label class="field"><span>Format</span>
+            <select id="aiFormat"><option value="">Auto</option><option>XLR</option><option>TRS</option><option>TT</option></select>
+          </label>
+          <label class="field"><span>Channels</span>
+            <input type="number" id="aiSize" min="1" max="128" placeholder="Auto" />
+          </label>
+          <label class="field"><span>Model</span>
+            <select id="aiModel">
+              <option value="claude-opus-5">Claude Opus 5 · best</option>
+              <option value="claude-sonnet-5">Claude Sonnet 5 · faster</option>
+              <option value="claude-haiku-4-5">Claude Haiku 4.5 · cheapest</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Anthropic API key <span class="muted small">— used only in your browser, sent directly to Anthropic</span></span>
+          <input type="password" id="aiKey" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="check"><input type="checkbox" id="aiRemember" /> Remember this key on this device</label>
+        <p class="muted small">No key? Create one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>. Each design costs a few cents of Anthropic API usage.</p>
+        <div class="modal-status" id="aiStatus"></div>
+      </div>
+      <footer class="modal-foot">
+        <button class="ghost" id="aiCancel">Cancel</button>
+        <button class="btn primary" id="aiGenerate">Design my patchbay</button>
+      </footer>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
