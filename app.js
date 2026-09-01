@@ -1160,19 +1160,18 @@ function aiTool() {
   };
 }
 
-async function generateWithAI({ gear, format, size, model, apiKey }) {
-  const userText = `Gear:\n${gear}\n\nTarget format: ${format || 'auto — you choose'}\nChannel count: ${size ? `EXACTLY ${size} — my patchbay physically has ${size} channels, do not return more or fewer` : 'auto — choose based on the gear'}`;
-  const body = {
-    model,
-    max_tokens: 12000,
-    system: AI_SYSTEM,
-    tools: [aiTool()],
-    tool_choice: { type: 'tool', name: 'design_patchbay' },
-    messages: [{ role: 'user', content: userText }],
-  };
-  // Thinking must be off to force a specific tool; the Claude 5 models accept the explicit disabled form.
-  if (model === 'claude-opus-5' || model === 'claude-sonnet-5') body.thinking = { type: 'disabled' };
+const AI_RESEARCH_ADDENDUM = `
 
+WEB RESEARCH:
+You have a web_search tool. Before designing, look up any listed gear whose exact I/O you are not certain of — channel counts, input/output connector types and levels, insert points. Keep it focused: a few searches, only for gear you need to verify. When done researching, call design_patchbay exactly once with the final layout. Never ask the user questions.`;
+
+// Server-side web search tool; Anthropic runs the searches within the request.
+function webSearchTool(model) {
+  const type = (model === 'claude-opus-5' || model === 'claude-sonnet-5') ? 'web_search_20260209' : 'web_search_20250305';
+  return { type, name: 'web_search', max_uses: 5 };
+}
+
+async function callAnthropic(body, apiKey) {
   let res;
   try {
     res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1190,9 +1189,44 @@ async function generateWithAI({ gear, format, size, model, apiKey }) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data && data.error && data.error.message) || `Anthropic API error (HTTP ${res.status}).`);
-  const block = (data.content || []).find((b) => b.type === 'tool_use' && b.name === 'design_patchbay');
-  if (!block || !block.input) throw new Error('The model did not return a layout — try again or rephrase your gear list.');
-  return block.input;
+  return data;
+}
+
+async function generateWithAI({ gear, format, size, model, apiKey, research, onProgress }) {
+  const userText = `Gear:\n${gear}\n\nTarget format: ${format || 'auto — you choose'}\nChannel count: ${size ? `EXACTLY ${size} — my patchbay physically has ${size} channels, do not return more or fewer` : 'auto — choose based on the gear'}`;
+  const body = {
+    model,
+    max_tokens: 12000,
+    system: AI_SYSTEM + (research ? AI_RESEARCH_ADDENDUM : ''),
+    tools: research ? [aiTool(), webSearchTool(model)] : [aiTool()],
+    messages: [{ role: 'user', content: userText }],
+  };
+  // Thinking must be off to force a specific tool; the Claude 5 models accept the explicit disabled form.
+  // In research mode the tool can't be forced (that would forbid searching), so the
+  // system prompt instructs the call and a follow-up turn below forces it if needed.
+  if (!research) body.tool_choice = { type: 'tool', name: 'design_patchbay' };
+  if (model === 'claude-opus-5' || model === 'claude-sonnet-5') body.thinking = { type: 'disabled' };
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const data = await callAnthropic(body, apiKey);
+    const block = (data.content || []).find((b) => b.type === 'tool_use' && b.name === 'design_patchbay');
+    if (block && block.input) return block.input;
+    // Long research turns can pause mid-way; echo the turn back and continue it.
+    if (data.stop_reason === 'pause_turn') {
+      if (onProgress) onProgress('Still researching your gear…');
+      body.messages = body.messages.concat([{ role: 'assistant', content: data.content }]);
+      continue;
+    }
+    // Finished (researching / talking) without the layout call — force it now.
+    if (onProgress) onProgress('Research done — designing the layout…');
+    body.messages = body.messages.concat([
+      { role: 'assistant', content: data.content },
+      { role: 'user', content: 'Now return the final layout by calling design_patchbay.' },
+    ]);
+    body.tools = [aiTool()];
+    body.tool_choice = { type: 'tool', name: 'design_patchbay' };
+  }
+  throw new Error('The model did not return a layout — try again or rephrase your gear list.');
 }
 
 // Map the tool's structured output into app state (like loading a file).
@@ -1273,11 +1307,14 @@ async function runAiDesign() {
   const format = $('#aiFormat').value;
   const size = parseInt($('#aiSize').value, 10) || 0;
   try { if ($('#aiRemember').checked) localStorage.setItem(AI_KEY_STORAGE, apiKey); else localStorage.removeItem(AI_KEY_STORAGE); } catch (e) { /* ignore */ }
+  const research = $('#aiResearch').checked;
   const btn = $('#aiGenerate');
   btn.disabled = true;
-  setStat('Designing your patchbay… this can take 10–30 seconds.', 'busy');
+  setStat(research
+    ? 'Researching your gear online, then designing… this can take a minute or two.'
+    : 'Designing your patchbay… this can take 10–30 seconds.', 'busy');
   try {
-    const layout = await generateWithAI({ gear, format, size, model, apiKey });
+    const layout = await generateWithAI({ gear, format, size, model, apiKey, research, onProgress: (msg) => setStat(msg, 'busy') });
     applyAILayout(layout, size);
     closeAiModal();
   } catch (err) {
