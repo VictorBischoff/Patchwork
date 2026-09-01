@@ -1110,6 +1110,9 @@ NORMALLING — the part people get wrong, so be precise:
 OUTBOARD PROCESSORS (compressors, EQs, FX):
 Standard practice is the unit's OUTPUT on top and its own INPUT directly below, as adjacent "out over in" columns set to "thru" — patching into it is always an explicit choice. Only normal a processor in-line (source out over processor in, processor out over destination in) if the user says that unit is permanently in one path.
 
+LEFTOVER DESTINATION-ONLY INPUTS (inputs with no everyday source feeding them):
+Each one gets the BOTTOM row of its own column with an EMPTY top jack and "thru" normalling. Never put a device input on the top row, never duplicate a jack that exists once, never stack a stereo pair vertically (L and R stay side by side in adjacent columns), and never share a column between two unrelated devices. If they don't all fit in the channel count, DROP the least-patched ones entirely and say so in the reasoning — a missing jack is honest, a fabricated layout is not.
+
 OTHER RULES:
 - Labels short (<= 10 chars), studio-style: "NEVE 1", "APOLLO 1", "CMP1 IN L", "GRP 3".
 - Give every jack a concise category; provide a categories list with a distinct hex colour (e.g. #3fb950) per category name you use.
