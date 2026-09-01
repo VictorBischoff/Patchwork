@@ -221,11 +221,31 @@
         <button class="modal-close" id="aiClose" title="Close" aria-label="Close">✕</button>
       </header>
       <div class="modal-body">
-        <p class="muted small">List your gear and Claude will lay out an optimal patchbay — outputs on top, inputs below, sensible normalling, categories and labels.</p>
-        <label class="field">
-          <span>Your gear <span class="muted small">— one item per line, or describe your setup</span></span>
-          <textarea id="aiGear" rows="7" spellcheck="false" placeholder="UA Apollo x8&#10;Neve 1073 preamp x2&#10;SSL Fusion&#10;Warm Audio WA-2A&#10;Yamaha NS-10 monitors&#10;Roland Juno-106&#10;Akai MPC"></textarea>
-        </label>
+        <p class="muted small">List your gear and Claude will lay out an optimal patchbay — outputs on top, inputs below, sensible normalling, categories and labels. Your entries are kept as a draft on this device.</p>
+
+        <section class="ai-section">
+          <div class="ai-sec-head">
+            <span>Your gear</span>
+            <button class="ghost" id="aiAddGear" type="button">+ Add gear</button>
+          </div>
+          <div class="ai-gear-grid ai-gear-head">
+            <span>Gear</span><span title="Outputs to put on the bay">Outs</span><span title="Inputs to put on the bay">Ins</span><span>Note</span><span></span>
+          </div>
+          <div id="aiGearRows"></div>
+        </section>
+
+        <section class="ai-section">
+          <div class="ai-sec-head">
+            <span>Routing &amp; priorities</span>
+            <button class="ghost" id="aiAddRoute" type="button">+ Add routing</button>
+          </div>
+          <p class="muted small ai-route-hint">Each routing = “outputs of A normally feed inputs of B” — the everyday, zero-cable path. Dropdowns fill in from your gear list.</p>
+          <div id="aiRouteRows"></div>
+          <label class="field">
+            <span>Notes <span class="muted small">— anything else the designer should honour</span></span>
+            <textarea id="aiPriorities" rows="3" spellcheck="false" placeholder="Use all 8 OctoPre inputs — main record path&#10;MPC outs are hardwired to the mixer, not through the bay"></textarea>
+          </label>
+        </section>
         <div class="field-row">
           <label class="field"><span>Format</span>
             <select id="aiFormat"><option value="">Auto</option><option>XLR</option><option>TRS</option><option>TT</option></select>

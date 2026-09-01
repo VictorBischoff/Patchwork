@@ -1288,20 +1288,123 @@ function renderAiNotes() {
   box.append(head, body);
 }
 
+/* ---- AI modal form: structured gear rows + routing builder, kept as a draft ---- */
+const AI_DRAFT_STORAGE = 'patchwork.aiDraft';
+
+function aiGearNames() {
+  return $$('#aiGearRows .ai-gear-row').map((r) => r.querySelector('.g-name').value.trim()).filter(Boolean);
+}
+function addAiGearRow(data) {
+  const d = data || {};
+  const row = document.createElement('div');
+  row.className = 'ai-gear-grid ai-gear-row';
+  row.innerHTML = `
+    <input class="g-name" placeholder="e.g. Soundcraft Delta 200" spellcheck="false" />
+    <input class="g-outs" type="number" min="0" max="64" placeholder="0" title="Outputs to put on the bay" />
+    <input class="g-ins" type="number" min="0" max="64" placeholder="0" title="Inputs to put on the bay" />
+    <input class="g-note" placeholder="e.g. monitor outs hardwired" spellcheck="false" />
+    <button class="row-del" type="button" title="Remove this gear">✕</button>`;
+  row.querySelector('.g-name').value = d.name || '';
+  if (d.outs) row.querySelector('.g-outs').value = d.outs;
+  if (d.ins) row.querySelector('.g-ins').value = d.ins;
+  row.querySelector('.g-note').value = d.note || '';
+  row.querySelector('.row-del').addEventListener('click', () => { row.remove(); refreshAiRouteSelects(); });
+  row.querySelector('.g-name').addEventListener('input', refreshAiRouteSelects);
+  $('#aiGearRows').appendChild(row);
+  return row;
+}
+function addAiRouteRow(data) {
+  const d = data || {};
+  const row = document.createElement('div');
+  row.className = 'ai-route-row';
+  row.innerHTML = `
+    <select class="r-from" data-hint="outputs of…"></select>
+    <span class="r-arrow" title="Source outputs sit over destination inputs, normalled">→</span>
+    <select class="r-to" data-hint="feed inputs of…"></select>
+    <button class="row-del" type="button" title="Remove this routing">✕</button>`;
+  row.querySelector('.row-del').addEventListener('click', () => row.remove());
+  $('#aiRouteRows').appendChild(row);
+  fillAiRouteSelect(row.querySelector('.r-from'), d.from);
+  fillAiRouteSelect(row.querySelector('.r-to'), d.to);
+  return row;
+}
+function fillAiRouteSelect(sel, value) {
+  const prev = value !== undefined ? value : sel.value;
+  const names = aiGearNames();
+  sel.innerHTML = '';
+  const ph = document.createElement('option');
+  ph.value = ''; ph.textContent = sel.dataset.hint;
+  sel.appendChild(ph);
+  names.forEach((n) => {
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    sel.appendChild(o);
+  });
+  if (prev && names.includes(prev)) sel.value = prev;
+}
+function refreshAiRouteSelects() { $$('#aiRouteRows select').forEach((sel) => fillAiRouteSelect(sel)); }
+
+function collectAiDraft() {
+  const gear = $$('#aiGearRows .ai-gear-row').map((r) => ({
+    name: r.querySelector('.g-name').value.trim(),
+    outs: r.querySelector('.g-outs').value.trim(),
+    ins: r.querySelector('.g-ins').value.trim(),
+    note: r.querySelector('.g-note').value.trim(),
+  })).filter((g) => g.name || g.note);
+  const routes = $$('#aiRouteRows .ai-route-row').map((r) => ({
+    from: r.querySelector('.r-from').value,
+    to: r.querySelector('.r-to').value,
+  })).filter((r) => r.from && r.to);
+  return { gear, routes, notes: $('#aiPriorities').value.trim() };
+}
+function saveAiDraft() {
+  try { localStorage.setItem(AI_DRAFT_STORAGE, JSON.stringify(collectAiDraft())); } catch (e) { /* ignore */ }
+}
+function loadAiDraft() {
+  try { return JSON.parse(localStorage.getItem(AI_DRAFT_STORAGE)); } catch (e) { return null; }
+}
+// Serialize the structured form into the request text the designer prompt reads.
+function buildAiGearText(draft) {
+  const lines = ['Gear (name — outputs on the bay / inputs on the bay — note):'];
+  draft.gear.forEach((g) => {
+    lines.push(`- ${g.name || 'Unnamed'} — ${g.outs || 0} out / ${g.ins || 0} in${g.note ? ` — ${g.note}` : ''}`);
+  });
+  if (draft.routes.length) {
+    lines.push('', 'Default routing the user wants — put each source over its destination and normal it:');
+    draft.routes.forEach((r) => lines.push(`- outputs of ${r.from} -> inputs of ${r.to}`));
+  }
+  if (draft.notes) lines.push('', 'Notes & priorities from the user (honour these):', draft.notes);
+  return lines.join('\n');
+}
+
 function openAiModal() {
   const modal = $('#aiModal');
   if (!modal) return;
   try { const k = localStorage.getItem(AI_KEY_STORAGE); if (k) { $('#aiKey').value = k; $('#aiRemember').checked = true; } } catch (e) { /* ignore */ }
   const s = $('#aiStatus'); s.textContent = ''; s.className = 'modal-status';
+  // Rebuild the form from the saved draft (or a blank starter form).
+  const draft = loadAiDraft();
+  $('#aiGearRows').innerHTML = '';
+  $('#aiRouteRows').innerHTML = '';
+  ((draft && draft.gear && draft.gear.length) ? draft.gear : [{}, {}, {}]).forEach(addAiGearRow);
+  ((draft && draft.routes && draft.routes.length) ? draft.routes : [{}]).forEach(addAiRouteRow);
+  $('#aiPriorities').value = (draft && draft.notes) || '';
   modal.hidden = false;
-  setTimeout(() => $('#aiGear').focus(), 30);
+  setTimeout(() => { const first = $('#aiGearRows .g-name'); if (first) first.focus(); }, 30);
 }
-function closeAiModal() { const m = $('#aiModal'); if (m) m.hidden = true; }
+function closeAiModal() {
+  const m = $('#aiModal');
+  if (!m || m.hidden) return;
+  saveAiDraft(); // keep the user's entries for next time
+  m.hidden = true;
+}
 async function runAiDesign() {
-  const gear = $('#aiGear').value.trim();
+  const draft = collectAiDraft();
   const apiKey = $('#aiKey').value.trim();
   const setStat = (msg, kind) => { const s = $('#aiStatus'); s.textContent = msg; s.className = 'modal-status' + (kind ? ' ' + kind : ''); };
-  if (!gear) { setStat('List at least one piece of gear first.', 'err'); $('#aiGear').focus(); return; }
+  if (!draft.gear.some((g) => g.name)) { setStat('Add at least one piece of gear first.', 'err'); const f = $('#aiGearRows .g-name'); if (f) f.focus(); return; }
+  saveAiDraft();
+  const gear = buildAiGearText(draft);
   if (!apiKey) { setStat('Enter your Anthropic API key.', 'err'); $('#aiKey').focus(); return; }
   const model = $('#aiModel').value;
   const format = $('#aiFormat').value;
@@ -1399,6 +1502,8 @@ function wire() {
   });
   // AI design modal
   $('#aiBtn').addEventListener('click', openAiModal);
+  $('#aiAddGear').addEventListener('click', () => { const r = addAiGearRow(); r.querySelector('.g-name').focus(); });
+  $('#aiAddRoute').addEventListener('click', () => addAiRouteRow());
   $('#aiClose').addEventListener('click', closeAiModal);
   $('#aiCancel').addEventListener('click', closeAiModal);
   $('#aiGenerate').addEventListener('click', runAiDesign);

@@ -438,14 +438,35 @@ main#page { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direct
 .ai-notes-dismiss:hover { color: var(--txt); background: var(--bg); }
 .ai-notes-body { margin: 0; font-size: 13px; line-height: 1.55; color: var(--txt); white-space: pre-wrap; }
 .modal {
-  width: 100%; max-width: 520px; background: var(--bg-2); color: var(--txt);
+  width: 100%; max-width: 640px; background: var(--bg-2); color: var(--txt);
   border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden;
+  display: flex; flex-direction: column; max-height: calc(100vh - 48px);
 }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: var(--bg-3); border-bottom: 1px solid var(--line); }
 .modal-head h2 { margin: 0; font-size: 16px; }
 .modal-close { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
 .modal-close:hover { color: var(--txt); background: var(--bg); }
-.modal-body { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.modal-body { padding: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+
+/* AI modal: gear rows + routing builder */
+.ai-section { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--bg-3); }
+.ai-sec-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; color: var(--txt); }
+.ai-sec-head .ghost { font-size: 12px; padding: 3px 9px; }
+.ai-gear-grid { display: grid; grid-template-columns: 1.4fr 52px 52px 1.2fr 24px; gap: 6px; align-items: center; }
+.ai-gear-head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+#aiGearRows { display: flex; flex-direction: column; gap: 6px; }
+.ai-gear-row input, .ai-route-row select {
+  background: var(--bg); border: 1px solid var(--line-2); color: var(--txt);
+  border-radius: 6px; padding: 6px 7px; font-size: 12.5px; font-family: inherit; width: 100%; min-width: 0;
+}
+.ai-gear-row input:focus, .ai-route-row select:focus { outline: none; border-color: var(--accent); }
+.ai-gear-row .g-outs, .ai-gear-row .g-ins { padding: 6px 4px; text-align: center; }
+.row-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 3px; border-radius: 5px; line-height: 1; }
+.row-del:hover { color: var(--danger); background: var(--bg); }
+#aiRouteRows { display: flex; flex-direction: column; gap: 6px; }
+.ai-route-row { display: grid; grid-template-columns: 1fr auto 1fr 24px; gap: 6px; align-items: center; }
+.ai-route-row .r-arrow { color: var(--accent-2); font-weight: 700; }
+.ai-route-hint { margin: 0; }
 .modal-body .field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
 .modal-body .field > span { color: var(--txt); }
 .modal-body textarea, .modal-body input[type=text], .modal-body input[type=password], .modal-body input[type=number], .modal-body select {
