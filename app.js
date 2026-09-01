@@ -16,7 +16,7 @@ const DEFAULT_CAT_COLORS = ['#5b9dff', '#3fb950', '#d29922', '#f85149', '#a371f7
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.2.2';
 const STORAGE_KEY = 'patchwork.autosave.v1';
 const LEGACY_STORAGE_KEYS = ['patchplanerultra.autosave.v1']; // read-only fallback for older autosaves
 
@@ -1541,7 +1541,7 @@ function wire() {
   $('#aiAddGear').addEventListener('click', () => { const r = addAiGearRow(); r.querySelector('.g-name').focus(); });
   $('#aiAddRoute').addEventListener('click', () => addAiRouteRow());
   $('#aiGearSave').addEventListener('click', exportAiGear);
-  $('#aiGearLoad').addEventListener('click', () => $('#aiGearFile').click());
+  // Load is a <label> wrapping the file input — the browser opens the picker natively.
   $('#aiGearFile').addEventListener('change', (e) => {
     const f = e.target.files[0];
     if (f) importAiGearFile(f);

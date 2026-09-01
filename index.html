@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#c5c3b6" />
 <title>Patchwork — Patchbay Designer</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="styles.css?v=1.2.2" />
 <!-- SheetJS for .xlsx export (optional; CSV/JSON work offline without it) -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -228,11 +228,10 @@
             <span>Your gear</span>
             <span class="ai-sec-tools">
               <button class="ghost" id="aiGearSave" type="button" title="Save gear, routings and notes to a file">💾 Save</button>
-              <button class="ghost" id="aiGearLoad" type="button" title="Load a saved gear file">📂 Load</button>
+              <label class="ghost file-btn" title="Load a saved gear file">📂 Load<input type="file" id="aiGearFile" accept=".json" hidden /></label>
               <button class="ghost" id="aiAddGear" type="button">+ Add gear</button>
             </span>
           </div>
-          <input type="file" id="aiGearFile" accept=".json" hidden />
           <div class="ai-gear-grid ai-gear-head">
             <span>Gear</span><span title="Outputs to put on the bay">Outs</span><span title="Inputs to put on the bay">Ins</span><span>Note</span><span></span>
           </div>
@@ -282,6 +281,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=1.2.2"></script>
 </body>
 </html>
