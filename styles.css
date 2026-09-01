@@ -452,6 +452,7 @@ main#page { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direct
 .ai-section { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: var(--bg-3); }
 .ai-sec-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; color: var(--txt); }
 .ai-sec-head .ghost { font-size: 12px; padding: 3px 9px; }
+.ai-sec-tools { display: flex; gap: 4px; }
 .ai-gear-grid { display: grid; grid-template-columns: 1.4fr 52px 52px 1.2fr 24px; gap: 6px; align-items: center; }
 .ai-gear-head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 #aiGearRows { display: flex; flex-direction: column; gap: 6px; }

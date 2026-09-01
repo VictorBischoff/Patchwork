@@ -1363,6 +1363,48 @@ function saveAiDraft() {
 function loadAiDraft() {
   try { return JSON.parse(localStorage.getItem(AI_DRAFT_STORAGE)); } catch (e) { return null; }
 }
+function aiStat(msg, kind) {
+  const s = $('#aiStatus');
+  if (!s) return;
+  s.textContent = msg;
+  s.className = 'modal-status' + (kind ? ' ' + kind : '');
+}
+// (Re)build the modal form from a draft object (or a blank starter form).
+function buildAiForm(draft) {
+  $('#aiGearRows').innerHTML = '';
+  $('#aiRouteRows').innerHTML = '';
+  ((draft && draft.gear && draft.gear.length) ? draft.gear : [{}, {}, {}]).forEach(addAiGearRow);
+  ((draft && draft.routes && draft.routes.length) ? draft.routes : [{}]).forEach(addAiRouteRow);
+  $('#aiPriorities').value = (draft && draft.notes) || '';
+}
+// Save / load the gear form as a file, so a studio setup can be backed up or moved.
+function exportAiGear() {
+  const draft = collectAiDraft();
+  if (!draft.gear.length) { aiStat('Nothing to save — add some gear first.', 'err'); return; }
+  const payload = { app: 'Patchwork', type: 'gear', version: APP_VERSION, ...draft };
+  download('patchwork-gear.json', new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  aiStat('Gear list saved to patchwork-gear.json.');
+}
+async function importAiGearFile(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (e) { aiStat('Could not read that file — not valid JSON.', 'err'); return; }
+  if (!data || !Array.isArray(data.gear)) { aiStat('Not a Patchwork gear file (no gear list found).', 'err'); return; }
+  const draft = {
+    gear: data.gear.map((g) => ({
+      name: String((g && g.name) || '').slice(0, 80),
+      outs: String((g && g.outs) || '').slice(0, 4),
+      ins: String((g && g.ins) || '').slice(0, 4),
+      note: String((g && g.note) || '').slice(0, 200),
+    })).filter((g) => g.name || g.note),
+    routes: (Array.isArray(data.routes) ? data.routes : [])
+      .filter((r) => r && r.from && r.to)
+      .map((r) => ({ from: String(r.from), to: String(r.to) })),
+    notes: typeof data.notes === 'string' ? data.notes.slice(0, 4000) : '',
+  };
+  buildAiForm(draft);
+  saveAiDraft();
+  aiStat(`Loaded ${draft.gear.length} piece${draft.gear.length === 1 ? '' : 's'} of gear.`);
+}
 // Serialize the structured form into the request text the designer prompt reads.
 function buildAiGearText(draft) {
   const lines = ['Gear (name — outputs on the bay / inputs on the bay — note):'];
@@ -1381,14 +1423,8 @@ function openAiModal() {
   const modal = $('#aiModal');
   if (!modal) return;
   try { const k = localStorage.getItem(AI_KEY_STORAGE); if (k) { $('#aiKey').value = k; $('#aiRemember').checked = true; } } catch (e) { /* ignore */ }
-  const s = $('#aiStatus'); s.textContent = ''; s.className = 'modal-status';
-  // Rebuild the form from the saved draft (or a blank starter form).
-  const draft = loadAiDraft();
-  $('#aiGearRows').innerHTML = '';
-  $('#aiRouteRows').innerHTML = '';
-  ((draft && draft.gear && draft.gear.length) ? draft.gear : [{}, {}, {}]).forEach(addAiGearRow);
-  ((draft && draft.routes && draft.routes.length) ? draft.routes : [{}]).forEach(addAiRouteRow);
-  $('#aiPriorities').value = (draft && draft.notes) || '';
+  aiStat('');
+  buildAiForm(loadAiDraft());
   modal.hidden = false;
   setTimeout(() => { const first = $('#aiGearRows .g-name'); if (first) first.focus(); }, 30);
 }
@@ -1401,7 +1437,7 @@ function closeAiModal() {
 async function runAiDesign() {
   const draft = collectAiDraft();
   const apiKey = $('#aiKey').value.trim();
-  const setStat = (msg, kind) => { const s = $('#aiStatus'); s.textContent = msg; s.className = 'modal-status' + (kind ? ' ' + kind : ''); };
+  const setStat = aiStat;
   if (!draft.gear.some((g) => g.name)) { setStat('Add at least one piece of gear first.', 'err'); const f = $('#aiGearRows .g-name'); if (f) f.focus(); return; }
   saveAiDraft();
   const gear = buildAiGearText(draft);
@@ -1504,6 +1540,13 @@ function wire() {
   $('#aiBtn').addEventListener('click', openAiModal);
   $('#aiAddGear').addEventListener('click', () => { const r = addAiGearRow(); r.querySelector('.g-name').focus(); });
   $('#aiAddRoute').addEventListener('click', () => addAiRouteRow());
+  $('#aiGearSave').addEventListener('click', exportAiGear);
+  $('#aiGearLoad').addEventListener('click', () => $('#aiGearFile').click());
+  $('#aiGearFile').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f) importAiGearFile(f);
+    e.target.value = ''; // allow re-loading the same file
+  });
   $('#aiClose').addEventListener('click', closeAiModal);
   $('#aiCancel').addEventListener('click', closeAiModal);
   $('#aiGenerate').addEventListener('click', runAiDesign);
