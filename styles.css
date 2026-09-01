@@ -425,6 +425,7 @@ main#page { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direct
   position: fixed; inset: 0; z-index: 400; display: flex; align-items: center; justify-content: center;
   background: rgba(30,28,20,.55); padding: 24px; overflow: auto;
 }
+.modal-overlay[hidden] { display: none; }
 .modal {
   width: 100%; max-width: 520px; background: var(--bg-2); color: var(--txt);
   border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden;
