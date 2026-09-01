@@ -53,6 +53,7 @@ function freshState(format, count) {
     ],
     faceplate: defaultFaceplate(),
     labelStrip: defaultLabelStrip(),
+    aiNotes: '', // designer's notes from the last AI-generated layout
   };
 }
 // Fresh default sub-objects (new instances each call so states never share mutable arrays).
@@ -131,6 +132,7 @@ function render() {
   $('#pointCount').value = state.count;
   renderFormatButtons();
   renderCats();
+  renderAiNotes();
   if (!ui.collapsed.faceplate) renderFaceplate();
   if (!ui.collapsed.labels) renderLabels();
   if (!ui.collapsed.table) renderTable();
@@ -1094,7 +1096,9 @@ Follow these conventions:
 - Group related I/O together, keep stereo L/R pairs adjacent and in order, and order groups logically: mics/preamps, converters/interface, outboard/FX, instruments/synths, monitors, headphones.
 - Labels must be short (<= 10 chars), studio-style: "NEVE 1", "APOLLO 1", "COMP L", "MON L".
 - Give every jack a concise category, and provide a categories list with a distinct hex colour (e.g. #3fb950) per category name you use.
-- Choose a format that fits: XLR for mic-level bays, TT or TRS for line-level patching (most studio bays are TT/TRS). Choose a channel count that covers the listed I/O. Honour any format or channel count the user specifies.
+- Choose a format that fits: XLR for mic-level bays, TT or TRS for line-level patching (most studio bays are TT/TRS). Choose a channel count that covers the listed I/O.
+- If the user specifies a channel count, that is the physical size of their patchbay: return EXACTLY that many channels — never more. Prioritise the most useful I/O to fit; leave any unused channels at the end with empty labels and "thru" normalling.
+- In "reasoning", explain your key choices to the user in a few short sentences: how you ordered the groups, which paths you normalled and why, and anything you left out or would change with more channels.
 Return only the tool call.`;
 
 function aiTool() {
@@ -1114,6 +1118,7 @@ function aiTool() {
       properties: {
         name: { type: 'string', description: 'Short name for the patchbay' },
         format: { type: 'string', enum: ['XLR', 'TRS', 'TT'] },
+        reasoning: { type: 'string', description: 'A few short sentences, addressed to the user, explaining the layout: group ordering, normalling choices, and any trade-offs or omissions.' },
         categories: {
           type: 'array',
           description: 'Categories used, each with a distinct hex colour',
@@ -1133,13 +1138,13 @@ function aiTool() {
           },
         },
       },
-      required: ['name', 'format', 'channels'],
+      required: ['name', 'format', 'channels', 'reasoning'],
     },
   };
 }
 
 async function generateWithAI({ gear, format, size, model, apiKey }) {
-  const userText = `Gear:\n${gear}\n\nTarget format: ${format || 'auto — you choose'}\nTarget channel count: ${size || 'auto — choose based on the gear'}`;
+  const userText = `Gear:\n${gear}\n\nTarget format: ${format || 'auto — you choose'}\nChannel count: ${size ? `EXACTLY ${size} — my patchbay physically has ${size} channels, do not return more or fewer` : 'auto — choose based on the gear'}`;
   const body = {
     model,
     max_tokens: 12000,
@@ -1174,10 +1179,13 @@ async function generateWithAI({ gear, format, size, model, apiKey }) {
 }
 
 // Map the tool's structured output into app state (like loading a file).
-function applyAILayout(data) {
+// requestedSize (if set) is the user's physical bay size — it wins over however
+// many channels the model returned: extras are dropped, gaps become empty columns.
+function applyAILayout(data, requestedSize) {
   const fmt = ['XLR', 'TRS', 'TT'].includes(data.format) ? data.format : 'TRS';
   const channels = Array.isArray(data.channels) ? data.channels : [];
-  const count = Math.max(1, Math.min(128, channels.length || 24));
+  const count = Math.max(1, Math.min(128, requestedSize || channels.length || 24));
+  const trimmed = channels.length > count ? channels.length - count : 0;
   state = freshState(fmt, count);
   state.name = (typeof data.name === 'string' && data.name.trim()) ? data.name.trim().slice(0, 60) : 'AI Patchbay';
   // Seed categories from the model's list (with its colours), then let channel refs fill in any extras.
@@ -1199,10 +1207,34 @@ function applyAILayout(data) {
     return col;
   });
   state.labelStrip.merges = { top: [], bottom: [] };
+  state.aiNotes = typeof data.reasoning === 'string' ? data.reasoning.trim().slice(0, 2000) : '';
   ui.selectedCells.clear(); ui.selRows.clear(); ui.rowAnchor = null;
   $('#bayName').value = state.name;
   render(); persistNow();
-  status(`AI designed a ${count}-channel · ${fmt} patchbay for your gear.`);
+  status(`AI designed a ${count}-channel · ${fmt} patchbay for your gear.` +
+    (trimmed ? ` (${trimmed} extra channel${trimmed > 1 ? 's' : ''} from the AI didn't fit and were dropped.)` : ''));
+}
+
+function renderAiNotes() {
+  const box = $('#aiNotes');
+  if (!box) return;
+  const text = (state.aiNotes || '').trim();
+  box.hidden = !text;
+  if (!text) { box.innerHTML = ''; return; }
+  box.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'ai-notes-head';
+  head.innerHTML = '<span class="ai-notes-title">✨ Designer’s notes</span>';
+  const dismiss = document.createElement('button');
+  dismiss.className = 'ai-notes-dismiss';
+  dismiss.title = 'Dismiss these notes';
+  dismiss.textContent = '✕';
+  dismiss.addEventListener('click', () => { state.aiNotes = ''; renderAiNotes(); persistNow(); });
+  head.appendChild(dismiss);
+  const body = document.createElement('p');
+  body.className = 'ai-notes-body';
+  body.textContent = text; // textContent — model output must never become HTML
+  box.append(head, body);
 }
 
 function openAiModal() {
@@ -1229,7 +1261,7 @@ async function runAiDesign() {
   setStat('Designing your patchbay… this can take 10–30 seconds.', 'busy');
   try {
     const layout = await generateWithAI({ gear, format, size, model, apiKey });
-    applyAILayout(layout);
+    applyAILayout(layout, size);
     closeAiModal();
   } catch (err) {
     setStat('Failed: ' + (err && err.message ? err.message : String(err)), 'err');
